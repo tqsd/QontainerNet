@@ -38,16 +38,16 @@ class Node:
         self.queue = []
         self.queue_size = queue_size
         self.frame_size = 48
-        self.packetInQueue = Event()
-        self.eprTrigger = Event()
-        self.eprLock = Event()
-        self.stopSignal = Event()
+        self.packet_in_queue = Event()
+        self.epr_trigger = Event()
+        self.epr_lock = Event()
+        self.stop_signal = Event()
         self.is_epr_initiator = is_epr_initiator
-        self.receivedThread = None
-        self.senderThread = None
+        self.receiver_thread = None
+        self.sender_thread = None
         self.epr_transmission_time = epr_transmission_time
         #if is_epr_initiator:
-        #    self.eprTrigger.set()
+        #    self.epr_trigger.set()
 
     def connect(self, node):
         ''' Only one connection needs to be made '''
@@ -60,43 +60,43 @@ class Node:
 
     def start(self):
         if self.is_epr_initiator:
-            self.timerThread = Timer(self.epr_transmission_time, self.epr_timer)
-            self.timerThread.start()
-        self.receiverThread = DaemonThread(self.receiver_protocol)
-        self.senderThread= DaemonThread(self.sender_protocol)
+            self.timer_thread = Timer(self.epr_transmission_time, self.epr_timer)
+            self.timer_thread.start()
+        self.received_thread = DaemonThread(self.receiver_protocol)
+        self.sender_thread= DaemonThread(self.sender_protocol)
         print(self.host.host_id + " protocols initiated")
 
     def stop(self):
         print("Sending stop signal")
-        self.stopSignal.set()
-        self.receiverThread.join()
-        self.senderThread.join()
+        self.stop_signal.set()
+        self.received_thread.join()
+        self.sender_thread.join()
     
-    def waitStop(self):
-        self.receiverThread.join()
-        self.senderThread.join()
+    def wait_stop(self):
+        self.received_thread.join()
+        self.sender_thread.join()
 
     def runUntilFinished(self):
-        self.receiverThread.join()
-        self.senderThread.join()
+        self.received_thread.join()
+        self.sender_thread.join()
 
     def epr_timer(self):
-        if self.stopSignal.is_set():
+        if self.stop_signal.is_set():
             return
         print("EPR")
-        self.eprTrigger.set()
-        self.eprLock.wait()
-        self.eprTrigger.clear()
-        self.eprLock.clear()
-        self.timerThread = Timer(self.epr_transmission_timer, self.epr_timer)
-        self.timerThread.start()
+        self.epr_trigger.set()
+        self.epr_lock.wait()
+        self.epr_trigger.clear()
+        self.epr_lock.clear()
+        self.timer_thread = Timer(self.epr_transmission_timer, self.epr_timer)
+        self.timer_thread.start()
 
 
     def receiver_protocol(self):
         print(self.host.host_id + " receiver protocol started")
         try:
             while True:
-                if self.stopSignal.is_set():
+                if self.stop_signal.is_set():
                     return
                 q = self.host.get_data_qubit(self.peer.host.host_id)
                 if q == None:
@@ -113,14 +113,14 @@ class Node:
         print(self.host.host_id + " sender protocol started")
         try:
             while True:
-                if self.stopSignal.is_set():
+                if self.stop_signal.is_set():
                     return
-                if self.packetInQueue.isSet():
+                if self.packet_in_queue.isSet():
                     self.transmit_packet()
-                elif self.eprTrigger.isSet():
+                elif self.epr_trigger.isSet():
                     self.transmit_epr_frame()
-                    self.eprLock.set()
-                    self.eprTrigger.clear()
+                    self.epr_lock.set()
+                    self.epr_trigger.clear()
         except Exception as e:
             print(e)
 
@@ -153,8 +153,8 @@ class Node:
 if __name__=="__main__":
     channel = Channel(['a','b'])
     try:
-        channel.node_a.waitStop()
-        channel.node_b.waitStop()
+        channel.node_a.wait_stop()
+        channel.node_b.wait_stop()
     except KeyboardInterrupt:
         print("Keyboard Interrupt")
         channel.node_a.stop()
