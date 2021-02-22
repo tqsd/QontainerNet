@@ -1,0 +1,44 @@
+FROM python:3.6-buster
+
+
+RUN apt-get update && \
+    apt-get install -y \
+    zip \
+    unzip \
+    tcpdump \
+    bridge-utils \
+    net-tools \
+    iptables \
+    tcpdump \
+    libpcap-dev && apt-get clean
+
+RUN apt-get -qq -y install \
+    python-dev \
+    libnetfilter-queue-dev \
+    build-essential
+
+RUN apt-get -qq -y install \
+    python3-pip \
+    vim \
+    tmux \
+    fping \
+    iperf
+
+RUN pip3 install cython
+RUN pip3 install matplotlib
+RUN pip3 install scapy==2.4.4
+RUN pip3 install NetfilterQueue
+RUN pip3 install qunetsim
+RUN pip3 install projectq
+RUN python3 --version
+
+# Force matplotlib to generate the font cache
+RUN python3 -c 'import matplotlib.pyplot'
+WORKDIR app
+# ADD ./bridge.py bridge.py
+COPY . .
+RUN ls
+
+ENV QUEUE_NUM=1
+
+
