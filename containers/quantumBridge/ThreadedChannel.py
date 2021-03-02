@@ -194,9 +194,12 @@ class QuantumFrame:
 
     def send(self, destination):
         print("Sending quantum frame from " + self.host.host_id + " to " + destination.host_id) 
+        print(self.qubit_array)
         for i, q in enumerate(self.qubit_array):
             #print("Sending "+str(i)+"/"+str(len(self.qubit_array))+": "+ str(q))
-            self.host.send_qubit(destination.host_id, q, await_ack=False)
+            q_id = self.host.send_qubit(destination.host_id, q, await_ack=True)
+            print(q_id)
+        print("Finished sending")
 
     def receive(self, source):
         print("Receiving quantum frame")
@@ -204,7 +207,7 @@ class QuantumFrame:
         header = ""
         while len(header) < 2:
             q = self.host.get_data_qubit(source.host_id)
-            print(q)
+            #print(self.host.is_idle())
             if not q is None:
                 m = q.measure()
                 if m:
