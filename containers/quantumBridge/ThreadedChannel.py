@@ -38,7 +38,7 @@ class Channel:
         pass
 
 class Node:
-    def __init__(self, host:str, network, backend, queue_size=512, is_epr_initiator=False, frame_size=48, epr_transmission_time=1):
+    def __init__(self, host:str, network, backend, queue_size=512, is_epr_initiator=False, frame_size=48, epr_transmission_time=100):
         self.host = Host(host, backend)
         self.network = network
         self.network.add_host(self.host)
@@ -66,7 +66,7 @@ class Node:
 
     def start(self):
         if self.is_epr_initiator:
-            self.timer_thread = Timer(self.epr_transmission_time, self.epr_timer)
+            self.timer_thread = Timer(1, self.epr_timer)
             self.timer_thread.start()
         self.receiver_thread = DaemonThread(self.receiver_protocol)
         self.sender_thread= DaemonThread(self.sender_protocol)
@@ -145,7 +145,6 @@ class Node:
         qf.send_epr_frame(self.peer.host)
         print("Transmitted")
         self.entanglement_buffer.extend(qf.extract_local_pairs())
-        print(self.entanglement_buffer)
 
     def receive_data_frame(self):
         pass
@@ -156,7 +155,7 @@ class Node:
         self.host.send_qubit(self.peer.host.host_id, q, await_ack=True)
 
 class QuantumFrame:
-    def __init__(self, host, MTU=5):
+    def __init__(self, host, MTU=20, await_ack=False):
         # MTU is in bytes
         self.type = None
         self.host = host
@@ -168,6 +167,7 @@ class QuantumFrame:
         self.creation_time = None
         self.received_time = None
         self.measurement_time = None
+        self.await_ack = await_ack
 
     def _create_header(self):
         q1 = Qubit(self.host)
@@ -208,7 +208,8 @@ class QuantumFrame:
             q = Qubit(self.host)
             if h == '1':
                 q.X()
-            q_id = self.host.send_qubit(destination.host_id, q, await_ack=True)
+            q_id = self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
+                                        no_ack=True)
         print("Header sent")
         for x in range(self.MTU):
             print("Sending " + str(x)+"/"+str(self.MTU)+" bytes")
@@ -218,18 +219,11 @@ class QuantumFrame:
                 q1.H()
                 q1.cnot(q2)
                 self.local_qubits.append(q1)
-                q_id = self.host.send_qubit(destination.host_id, q2, await_ack=True)
+                q_id = self.host.send_qubit(destination.host_id, q2, await_ack=self.await_ack,
+                                            no_ack=True)
                 
     def extract_local_pairs(self):
         return self.local_qubits
-
-    def _send(self, destination):
-        print("Sending quantum frame from " + self.host.host_id + " to " + destination.host_id) 
-        print(self.qubit_array)
-        for i, q in enumerate(self.qubit_array):
-            #print("Sending "+str(i)+"/"+str(len(self.qubit_array))+": "+ str(q))
-            q_id = self.host.send_qubit(destination.host_id, q, await_ack=False)
-        print("Finished sending")
 
     def receive(self, source):
         print("Receiving quantum frame")
