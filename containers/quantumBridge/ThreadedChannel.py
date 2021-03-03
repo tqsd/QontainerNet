@@ -1,8 +1,12 @@
 from qunetsim.components import Host, Network
 from qunetsim.objects import Qubit
-from qunetsim.backends import ProjectQBackend
+from qunetsim.backends import ProjectQBackend 
+from qunetsim.backends.qutip_backend import QuTipBackend
 from threading import Thread, Event, Timer
 import sys, time
+from qunetsim.objects import Logger
+
+Logger.DISABLED = True
 
 class DaemonThread(Thread):
     """ A Daemon thread that runs a task until completion and then exits. """
@@ -15,8 +19,9 @@ class DaemonThread(Thread):
         self.start() 
 
 class Channel:
-    def __init__(self, hosts):
-        self.backend = ProjectQBackend()
+    def __init__(self, hosts, backend=QuTipBackend()):
+        #self.backend = ProjectQBackend()
+        self.backend = backend
         self.network = Network.get_instance()
         self.network.start(nodes=hosts, backend=self.backend)
         self.node_a = Node(hosts[0], self.network, self.backend, is_epr_initiator=True)
@@ -84,7 +89,7 @@ class Node:
     def epr_timer(self):
         if self.stop_signal.is_set():
             return
-        print("EPR")
+        print("Initiating EPR Transmission")
         self.epr_trigger.set()
         self.epr_lock.wait()
         self.epr_trigger.clear()
@@ -98,11 +103,14 @@ class Node:
         try:
             while True:
                 print("Listening for quantum frames")
-                print(self.stop_signal.is_set())
                 if self.stop_signal.is_set():
                     return
                 qf = QuantumFrame(self.host)
                 qf.receive(self.peer.host)
+                if qf.type == 'EPR':
+                    print("EPR FRAME RECEIVED")
+                    self.entanglement_buffer.extend(qf.extract_local_pairs())
+                    print(self.host.host_id + " currently has " + str(len(self.entanglement_buffer)) + " local pairs")
 
                 continue
         except Exception as e:
@@ -119,20 +127,25 @@ class Node:
                     self.transmit_packet()
                 elif self.epr_trigger.isSet():
                     self.transmit_epr_frame()
+                    #self._measure_eprs_test()
+                    #print(self.host.host_id + " currently has " + str(len(self.entanglement_buffer)) + " local pairs")
                     self.epr_lock.set()
                     self.epr_trigger.clear()
         except Exception as e:
             print(e)
-
-    def receive_epr_frame(self):
-        print("Receiving epr frame")
-        pass
+    
+    def _measure_eprs_test(self):
+        for q in self.entanglement_buffer:
+            m = q.measure()
+            print(self.host.host_id + "--" + m)
 
     def transmit_epr_frame(self):
         qf = QuantumFrame(host=self.host) 
-        qf.create_epr_frame()
+        #qf.create_epr_frame()
+        qf.send_epr_frame(self.peer.host)
+        print("Transmitted")
         self.entanglement_buffer.extend(qf.extract_local_pairs())
-        qf.send(self.peer.host)
+        print(self.entanglement_buffer)
 
     def receive_data_frame(self):
         pass
@@ -143,7 +156,7 @@ class Node:
         self.host.send_qubit(self.peer.host.host_id, q, await_ack=True)
 
 class QuantumFrame:
-    def __init__(self, host, MTU=10):
+    def __init__(self, host, MTU=5):
         # MTU is in bytes
         self.type = None
         self.host = host
@@ -188,17 +201,34 @@ class QuantumFrame:
         self.creation_time = time.time()
         print("EPR FRAME CREATED")
         print("IT took: " + str( self.creation_time - self.start_time ))
-
+    
+    def send_epr_frame(self, destination):
+        header = '00'
+        for h in header:
+            q = Qubit(self.host)
+            if h == '1':
+                q.X()
+            q_id = self.host.send_qubit(destination.host_id, q, await_ack=True)
+        print("Header sent")
+        for x in range(self.MTU):
+            print("Sending " + str(x)+"/"+str(self.MTU)+" bytes")
+            for i in range(8):
+                q1 = Qubit(self.host)
+                q2 = Qubit(self.host)
+                q1.H()
+                q1.cnot(q2)
+                self.local_qubits.append(q1)
+                q_id = self.host.send_qubit(destination.host_id, q2, await_ack=True)
+                
     def extract_local_pairs(self):
         return self.local_qubits
 
-    def send(self, destination):
+    def _send(self, destination):
         print("Sending quantum frame from " + self.host.host_id + " to " + destination.host_id) 
         print(self.qubit_array)
         for i, q in enumerate(self.qubit_array):
             #print("Sending "+str(i)+"/"+str(len(self.qubit_array))+": "+ str(q))
-            q_id = self.host.send_qubit(destination.host_id, q, await_ack=True)
-            print(q_id)
+            q_id = self.host.send_qubit(destination.host_id, q, await_ack=False)
         print("Finished sending")
 
     def receive(self, source):
@@ -207,16 +237,31 @@ class QuantumFrame:
         header = ""
         while len(header) < 2:
             q = self.host.get_data_qubit(source.host_id)
-            #print(self.host.is_idle())
             if not q is None:
                 m = q.measure()
                 if m:
                     header = header + '1'
                 else:
                     header = header + '0'
-                print(len(header))
 
-        print(header)
+        print("HEADER RECEIVED: "+ header)
+        if header == '00':
+            print("RECEIVING EPR FRAME")
+            self._receive_epr(source)
+
+    def _receive_epr(self, source):
+        self.type = 'EPR'
+        for x in range(self.MTU):
+            print("Receiving " + str(x+1) + " byte of " + str(self.MTU))
+            for i in range(8):
+                q = self.host.get_data_qubit(source.host_id)
+                while q is None:
+                    q = self.host.get_data_qubit(source.host_id)
+                self.local_qubits.append(q)
+        print("Frame received")
+
+
+
             
 #RUN EPR GENERATION
 if __name__=="__main__":
