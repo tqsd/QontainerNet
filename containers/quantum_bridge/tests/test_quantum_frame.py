@@ -1,9 +1,8 @@
 import unittest
-from .. import Node
+from .. import QuantumFrame
 
 
-class TestNode(unittest.TestCase):
-
+class TestQuantumFrame(unittest.TestCase):
     # Runs before all tests
     @classmethod
     def setUpClass(cls) -> None:

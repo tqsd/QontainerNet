@@ -1,6 +1,6 @@
 from qunetsim.components import Host, Network
 from qunetsim.objects import Qubit
-from qunetsim.backends import ProjectQBackend 
+from qunetsim.backends import ProjectQBackend
 from qunetsim.backends.qutip_backend import QuTipBackend
 from threading import Thread, Event, Timer
 import sys
@@ -18,7 +18,7 @@ class DaemonThread(Thread):
             super().__init__(target=target, daemon=True, args=args)
         else:
             super().__init__(target=target, daemon=True)
-        self.start() 
+        self.start()
 
 
 def routing_algorithm(di_graph, source, destination):
@@ -31,6 +31,7 @@ class Channel:
     -> Initiates network and nodes,
     -> Passes classical messages to the right node and retrievs them from other node
     """
+
     def __init__(self, hosts, backend=QuTipBackend()):
         self.backend = backend
         self.network = Network.get_instance()
@@ -50,11 +51,12 @@ class Channel:
         """ Passes classical packet through quantum channel"""
         print(packet_bits)
         print(len(packet_bits))
-        source_node = [node for node in [self.node_a,self.node_b] if node.host.host_id==source_host][0]
-        destination_node = [node for node in [self.node_a,self.node_b] if node.host.host_id!=source_host][0]
+        source_node = [node for node in [self.node_a, self.node_b] if node.host.host_id == source_host][0]
+        destination_node = [node for node in [self.node_a, self.node_b] if node.host.host_id != source_host][0]
         source_node.add_to_in_queue(packet_bits)
         out_bits = destination_node.get_from_out_queue()
         return out_bits
+
 
 class Node:
     """ Node class
@@ -64,7 +66,9 @@ class Node:
         -> Sender protocol
         -> EPR initiator timer (Only one node can be epr initiator)
     """
-    def __init__(self, host:str, network, backend, queue_size=512, is_epr_initiator=False, frame_size=48, epr_transmission_time=100):
+
+    def __init__(self, host: str, network, backend, queue_size=512, is_epr_initiator=False, frame_size=48,
+                 epr_transmission_time=100):
         self.host = Host(host, backend)
         self.host.delay = 0
         self.network = network
@@ -101,7 +105,7 @@ class Node:
             self.timer_thread = Timer(1, self.epr_timer)
             self.timer_thread.start()
         self.receiver_thread = DaemonThread(self.receiver_protocol)
-        self.sender_thread= DaemonThread(self.sender_protocol)
+        self.sender_thread = DaemonThread(self.sender_protocol)
         print(self.host.host_id + " protocols initiated")
 
     def stop(self):
@@ -109,7 +113,7 @@ class Node:
         self.stop_signal.set()
         self.receiver_thread.join()
         self.sender_thread.join()
-    
+
     def wait_stop(self):
         """ Waits and joins the threads """
         self.receiver_thread.join()
@@ -156,7 +160,7 @@ class Node:
     def sender_protocol(self):
         print(self.host.host_id + " sender protocol started")
         try:
-            while True: 
+            while True:
                 if self.stop_signal.is_set():
                     return
                 if self.packet_in_queue_event.isSet():
@@ -202,7 +206,7 @@ class Node:
 
 
 class QuantumFrame:
-    def __init__(self, node:Node, mtu=5, await_ack=False):
+    def __init__(self, node: Node, mtu=5, await_ack=False):
         # MTU is in bytes
         self.type = None
         self.node = node
@@ -236,7 +240,7 @@ class QuantumFrame:
         """ Creating epr ahead of time, not used currently"""
         if self.type is not None:
             raise Exception("Quantum Frame type already defined")
-        self.type = "EPR" 
+        self.type = "EPR"
         self.qubit_array.extend(self._create_header())
         print("Header created")
         for x in range(self.MTU):
@@ -289,7 +293,7 @@ class QuantumFrame:
                 break
             byte = data.pop(0)
             for crumb in range(0, len(byte), 2):
-                crumb = ''.join(byte[crumb:crumb+2])
+                crumb = ''.join(byte[crumb:crumb + 2])
                 q = buffer.pop(0)
                 print("sending crumb " + crumb)
                 if crumb == '00':
@@ -334,7 +338,7 @@ class QuantumFrame:
             q_id = self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
                                         no_ack=True)
         for x in range(self.MTU):
-            print("Sending " + str(x)+"/"+str(self.MTU)+" bytes")
+            print("Sending " + str(x) + "/" + str(self.MTU) + " bytes")
             for i in range(8):
                 q1 = Qubit(self.host)
                 q2 = Qubit(self.host)
@@ -343,7 +347,7 @@ class QuantumFrame:
                 self.local_qubits.append(q1)
                 q_id = self.host.send_qubit(destination.host_id, q2, await_ack=self.await_ack,
                                             no_ack=True)
-                
+
     def extract_local_pairs(self):
         return self.local_qubits
 
@@ -382,14 +386,14 @@ class QuantumFrame:
             q1.cnot(q2)
             q1.H()
             crumb = ""
-            crumb = crumb+str(q1.measure())
-            crumb = crumb+str(q2.measure())
-            print("received "+ crumb)
+            crumb = crumb + str(q1.measure())
+            crumb = crumb + str(q2.measure())
+            print("received " + crumb)
             if len(data) == 0:
                 data.append(crumb)
                 continue
-            elif len(data[-1])<8:
-                data[-1]=data[-1]+crumb
+            elif len(data[-1]) < 8:
+                data[-1] = data[-1] + crumb
             else:
                 data.append(crumb)
                 print(data)
@@ -416,7 +420,7 @@ class QuantumFrame:
                 data.append(bit)
                 continue
             elif len(data[-1]) < 8:
-                data[-1] = data[-1]+bit
+                data[-1] = data[-1] + bit
             else:
                 data.append(bit)
                 print(data)
@@ -429,7 +433,7 @@ class QuantumFrame:
     def _receive_epr(self, source):
         self.type = 'EPR'
         for x in range(self.MTU):
-            print("Receiving " + str(x+1) + " byte of " + str(self.MTU))
+            print("Receiving " + str(x + 1) + " byte of " + str(self.MTU))
             for i in range(8):
                 q = self.host.get_data_qubit(source.host_id)
                 while q is None:
@@ -448,4 +452,3 @@ if __name__ == "__main__":
         channel.node_a.stop()
         channel.node_b.stop()
         sys.exit(0)
-

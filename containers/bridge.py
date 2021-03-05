@@ -6,7 +6,7 @@ from qunetsim.objects import Qubit
 from scapy.all import *
 import os
 
-from quantumBridge.ThreadedChannel import Channel
+from quantum_bridge.threaded_channel import Channel
 
 import time
 import os
