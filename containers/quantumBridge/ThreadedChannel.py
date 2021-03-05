@@ -48,8 +48,13 @@ class Channel:
 
     def transmit_packet(self, packet_bits, source_host):
         """ Passes classical packet through quantum channel"""
-        pass
-
+        print(packet_bits)
+        print(len(packet_bits))
+        source_node = [node for node in [self.node_a,self.node_b] if node.host.host_id==source_host][0]
+        destination_node = [node for node in [self.node_a,self.node_b] if node.host.host_id!=source_host][0]
+        source_node.add_to_in_queue(packet_bits)
+        out_bits = destination_node.get_from_out_queue()
+        return out_bits
 
 class Node:
     """ Node class
@@ -67,7 +72,10 @@ class Node:
         self.entanglement_buffer = []
         self.queue_size = queue_size
         self.frame_size = 48
-        self.packet_in_queue = Event()
+        self.packet_in_queue_event = Event()
+        self.packet_out_queue_event = Event()
+        self.packet_in_queue = []
+        self.packet_out_queue = []
         self.epr_trigger = Event()
         self.epr_lock = Event()
         self.stop_signal = Event()
@@ -131,15 +139,15 @@ class Node:
             while True:
                 if self.stop_signal.is_set():
                     return
-                qf = QuantumFrame(self.host)
+                qf = QuantumFrame(node=self)
                 qf.receive(self.peer.host)
                 if qf.type == 'EPR':
                     self.entanglement_buffer.extend(qf.extract_local_pairs())
                     print(str(len(self.entanglement_buffer)) + " available local pairs")
-                elif qf.type == 'DATA_SC':
-                    pass
-                elif qf.type == 'DATA_SEQ':
-                    pass
+                else:
+                    print("DATA FRAME RECEIVED -- " + qf.type)
+                    self.packet_out_queue.append(qf.raw_bits)
+                    self.packet_out_queue_event.set()
 
         except Exception as e:
             print("Exception in receiver protocol")
@@ -151,8 +159,10 @@ class Node:
             while True: 
                 if self.stop_signal.is_set():
                     return
-                if self.packet_in_queue.isSet():
-                    self.transmit_packet()
+                if self.packet_in_queue_event.isSet():
+                    self.transmit_data_frame(self.packet_in_queue.pop(0))
+                    if len(self.packet_in_queue) == 0:
+                        self.packet_in_queue_event.clear()
                 elif self.epr_trigger.isSet():
                     self.transmit_epr_frame()
                     self.epr_lock.set()
@@ -160,27 +170,45 @@ class Node:
         except Exception as e:
             print(e)
 
+    def add_to_in_queue(self, data):
+        self.packet_in_queue.append(data)
+        self.packet_in_queue_event.set()
+
+    def get_from_out_queue(self):
+        self.packet_out_queue_event.wait()
+        out_packet = self.packet_out_queue.pop(0)
+        if len(self.packet_out_queue) == 0:
+            self.packet_out_queue_event.clear()
+        return out_packet
+
     def transmit_epr_frame(self):
-        qf = QuantumFrame(host=self.host) 
+        qf = QuantumFrame(node=self)
         qf.send_epr_frame(self.peer.host)
         print("Transmitted")
         self.entanglement_buffer.extend(qf.extract_local_pairs())
 
-    def receive_data_frame(self):
-        pass
+    def transmit_data_frame(self, data):
+        qf = QuantumFrame(node=self)
+        qf.send_data_frame(data, self.peer.host, self.entanglement_buffer)
+        print("Transmitted data")
 
-    def transmit_packet(self):
-        q = Qubit(self.host)
-        q.X()
-        self.host.send_qubit(self.peer.host.host_id, q, await_ack=True)
+    def ackquire_buffer(self):
+        buffer = self.entanglement_buffer
+        self.entanglement_buffer = []
+        return buffer
+
+    def release_buffer(self, buffer):
+        self.entanglement_buffer = buffer + self.entanglement_buffer
 
 
 class QuantumFrame:
-    def __init__(self, host, mtu=10, await_ack=False):
+    def __init__(self, node:Node, mtu=5, await_ack=False):
         # MTU is in bytes
         self.type = None
-        self.host = host
+        self.node = node
+        self.host = node.host
         self.MTU = mtu
+        self.raw_bits = None
         self.qubit_array = []
         self.local_qubits = []
         # Performance statistics
@@ -189,6 +217,7 @@ class QuantumFrame:
         self.received_time = None
         self.measurement_time = None
         self.await_ack = await_ack
+        self.termination_byte = "01111110"
 
     def _create_header(self):
         """ For ahead of time qubit preparation, not used currently"""
@@ -220,6 +249,81 @@ class QuantumFrame:
                 self.qubit_array.append(q2)
 
         self.creation_time = time.time()
+
+    def send_data_frame(self, data, destination, entanglement_buffer=[]):
+        """Send data frame, sequential or superdense ecnoded"""
+        print("Sending data frame")
+        self.raw_bits = data
+        data.append(self.termination_byte)
+        if self.type is not None:
+            raise Exception("Quantum Frame type already defined")
+
+        if len(entanglement_buffer) == 0:
+            print("Sending sequentially")
+            self.type = "DATA_SEQ"
+            self._send_data_frame_header(destination)
+            self._send_data_frame_seq(data, destination)
+        else:
+            print("Sending superdense encoded")
+            self.type = "DATA_SC"
+            self._send_data_frame_header(destination)
+            self._send_data_frame_sc(data, destination)
+        print("Data frame transmitted")
+
+    def _send_data_frame_seq(self, data, destination):
+        for byte in data:
+            for bit in byte:
+                q = Qubit(self.host)
+                if bit == '1':
+                    q.X()
+                q_id = self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
+                                            no_ack=True)
+
+    def _send_data_frame_sc(self, data, destination):
+        buffer = self.node.ackquire_buffer()
+        print(buffer)
+        print(len(buffer))
+        while len(data) > 0:
+            if len(buffer) < 8:
+                print("SENDING: No more local pairs available")
+                break
+            byte = data.pop(0)
+            for crumb in range(0, len(byte), 2):
+                crumb = ''.join(byte[crumb:crumb+2])
+                q = buffer.pop(0)
+                print("sending crumb " + crumb)
+                if crumb == '00':
+                    q.I()
+                elif crumb == '10':
+                    q.Z()
+                elif crumb == '01':
+                    q.X()
+                elif crumb == '11':
+                    q.X()
+                    q.Z()
+                q_id = self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
+                                            no_ack=True)
+        if len(data) > 0:
+            print("Continuing with sequential sending")
+            print(data)
+            self._send_data_frame_seq(data, destination)
+        self.node.release_buffer(buffer)
+
+    def _send_data_frame_header(self, destination):
+        print("Sending header")
+        header = None
+        if self.type == "DATA_SEQ":
+            header = "10"
+        if self.type == "DATA_SC":
+            header = "01"
+        for h in header:
+            q = Qubit(self.host)
+            if h == '1':
+                q.X()
+            q_id = self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
+                                        no_ack=True)
+
+        print("Header sent")
 
     def send_epr_frame(self, destination):
         header = '00'
@@ -254,9 +358,73 @@ class QuantumFrame:
                     header = header + '1'
                 else:
                     header = header + '0'
-
+        print("Header received")
         if header == '00':
             self._receive_epr(source)
+        if header == '01':
+            self.type = "DATA_SC"
+            self._receive_data_sc(source)
+        if header == '10':
+            self.type = "DATA_SEQ"
+            self._receive_data_seq(source)
+
+    def _receive_data_sc(self, source):
+        print("Receiving data frame superdense encoded")
+        buffer = self.node.ackquire_buffer()
+        print(len(buffer))
+        complete = False
+        data = []
+        while len(buffer) > 7 and not complete:
+            q1 = self.host.get_data_qubit(source.host_id)
+            if q1 is None:
+                continue
+            q2 = buffer.pop(0)
+            q1.cnot(q2)
+            q1.H()
+            crumb = ""
+            crumb = crumb+str(q1.measure())
+            crumb = crumb+str(q2.measure())
+            print("received "+ crumb)
+            if len(data) == 0:
+                data.append(crumb)
+                continue
+            elif len(data[-1])<8:
+                data[-1]=data[-1]+crumb
+            else:
+                data.append(crumb)
+                print(data)
+                continue
+
+            if data[-1] == self.termination_byte:
+                complete = True
+        self.node.release_buffer(buffer)
+
+        if not complete:
+            self._receive_data_seq(source, data)
+        else:
+            self.raw_bits = data
+
+    def _receive_data_seq(self, source, data=[]):
+        print("Receiving data frame sequentially")
+        complete = False
+        while not complete:
+            q = self.host.get_data_qubit(source.host_id)
+            if q is None:
+                continue
+            bit = str(q.measure())
+            if len(data) == 0:
+                data.append(bit)
+                continue
+            elif len(data[-1]) < 8:
+                data[-1] = data[-1]+bit
+            else:
+                data.append(bit)
+                print(data)
+                continue
+
+            if data[-1] == self.termination_byte:
+                complete = True
+        self.raw_bits = data
 
     def _receive_epr(self, source):
         self.type = 'EPR'

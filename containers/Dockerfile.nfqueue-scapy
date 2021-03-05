@@ -30,6 +30,7 @@ RUN pip3 install scapy==2.4.4
 RUN pip3 install NetfilterQueue
 RUN pip3 install qunetsim
 RUN pip3 install projectq
+RUN pip3 install qutip
 RUN python3 --version
 
 # Force matplotlib to generate the font cache
