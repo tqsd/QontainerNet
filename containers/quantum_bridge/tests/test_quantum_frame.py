@@ -1,5 +1,5 @@
 import unittest
-from .. import QuantumFrame
+from ..threaded_channel import QuantumFrame
 
 
 class TestQuantumFrame(unittest.TestCase):

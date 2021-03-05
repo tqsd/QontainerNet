@@ -1,5 +1,5 @@
 import unittest
-from .. import Node
+from ..threaded_channel import Node
 
 
 class TestNode(unittest.TestCase):
