@@ -83,6 +83,7 @@ class Node:
         self.epr_trigger = Event()
         self.epr_lock = Event()
         self.stop_signal = Event()
+        self.is_busy = Event()
         self.is_epr_initiator = is_epr_initiator
         self.timer_thread = None
         self.receiver_thread = None
@@ -133,8 +134,8 @@ class Node:
         self.epr_lock.wait()
         self.epr_trigger.clear()
         self.epr_lock.clear()
-        self.timer_thread = Timer(self.epr_transmission_time, self.epr_timer)
-        self.timer_thread.start()
+        # self.timer_thread = Timer(self.epr_transmission_time, self.epr_timer)
+        # self.timer_thread.start()
 
     def receiver_protocol(self):
         """ Receiver protocol """
@@ -196,7 +197,7 @@ class Node:
         qf.send_data_frame(data, self.peer.host, self.entanglement_buffer)
         print("Transmitted data")
 
-    def ackquire_buffer(self):
+    def acquire_buffer(self):
         buffer = self.entanglement_buffer
         self.entanglement_buffer = []
         return buffer
@@ -206,7 +207,7 @@ class Node:
 
 
 class QuantumFrame:
-    def __init__(self, node: Node, mtu=5, await_ack=False):
+    def __init__(self, node: Node, mtu=40, await_ack=False):
         # MTU is in bytes
         self.type = None
         self.node = node
@@ -284,11 +285,10 @@ class QuantumFrame:
                                             no_ack=True)
 
     def _send_data_frame_sc(self, data, destination):
-        buffer = self.node.ackquire_buffer()
-        print(buffer)
-        print(len(buffer))
+        buffer = self.node.acquire_buffer()
+        print("Sender epr buffer length:" + str(len(buffer)))
         while len(data) > 0:
-            if len(buffer) < 8:
+            if len(buffer) == 0:
                 print("SENDING: No more local pairs available")
                 break
             byte = data.pop(0)
@@ -338,7 +338,7 @@ class QuantumFrame:
             q_id = self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
                                         no_ack=True)
         for x in range(self.MTU):
-            print("Sending " + str(x) + "/" + str(self.MTU) + " bytes")
+            print("Sending " + str(x + 1) + "/" + str(self.MTU) + " bytes")
             for i in range(8):
                 q1 = Qubit(self.host)
                 q2 = Qubit(self.host)
@@ -374,11 +374,11 @@ class QuantumFrame:
 
     def _receive_data_sc(self, source):
         print("Receiving data frame superdense encoded")
-        buffer = self.node.ackquire_buffer()
-        print(len(buffer))
+        buffer = self.node.acquire_buffer()
         complete = False
         data = []
-        while len(buffer) > 7 and not complete:
+        while len(buffer) > 0 and not complete:
+            print("Received epr buffer length: " + str(len(buffer)))
             q1 = self.host.get_data_qubit(source.host_id)
             if q1 is None:
                 continue
@@ -406,7 +406,7 @@ class QuantumFrame:
         if not complete:
             self._receive_data_seq(source, data)
         else:
-            self.raw_bits = data
+            self.raw_bits = data[:-1]
 
     def _receive_data_seq(self, source, data=[]):
         print("Receiving data frame sequentially")
@@ -428,7 +428,7 @@ class QuantumFrame:
 
             if data[-1] == self.termination_byte:
                 complete = True
-        self.raw_bits = data
+        self.raw_bits = data[:-1]
 
     def _receive_epr(self, source):
         self.type = 'EPR'
