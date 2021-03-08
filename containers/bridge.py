@@ -6,7 +6,7 @@ from qunetsim.objects import Qubit
 from scapy.all import *
 import os
 
-from quantum_bridge.threaded_channel import Channel
+from quantum_bridge.threaded_channel.channel import Channel
 
 import time
 import os
@@ -37,6 +37,13 @@ with open("/app/hosts.txt", "r") as host_file:
 
 quantum_protocol = Channel(hosts)
 
+def packet_diff(in_bits:list, out_bits:list):
+    print(in_bits)
+    print(out_bist)
+    for i in range(len(out_bits)):
+        if in_bits[i] != out_bits[i]:
+            print(in_bits[i], out_bits[i])
+
 
 def packet_processing(pkt):
     print("Packet has arrived")
@@ -54,8 +61,6 @@ def packet_processing(pkt):
         send(new_packet)
         end = time.time()
         logfile.write("PACKET TRANSMITTED_________________\n")
-        print(packet_bits)
-        print(new_packet_bits)
         logfile.write(hexdump(packet, dump=True) + "\n")
         logfile.write(hexdump(new_packet, dump=True)+ "\n")
         logfile.write("Transmission time:" + str(end-start) + "\n")

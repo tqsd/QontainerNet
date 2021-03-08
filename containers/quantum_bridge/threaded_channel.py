@@ -1,6 +1,6 @@
 import sys
 
-from threaded_channel import Channel
+from threaded_channel.channel import Channel
 
 if __name__ == "__main__":
     channel = Channel(['Alice', 'Bob'])

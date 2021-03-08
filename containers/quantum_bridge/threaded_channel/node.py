@@ -34,6 +34,7 @@ class Node:
         self.epr_trigger = Event()
         self.epr_lock = Event()
         self.stop_signal = Event()
+        self.is_busy = Event()
         self.is_epr_initiator = is_epr_initiator
         self.timer_thread = None
         self.receiver_thread = None
@@ -114,11 +115,11 @@ class Node:
             while True:
                 if self.stop_signal.is_set():
                     return
-                if self.packet_in_queue_event.isSet():
+                if self.packet_in_queue_event.is_set():
                     self.transmit_data_frame(self.packet_in_queue.pop(0))
                     if len(self.packet_in_queue) == 0:
                         self.packet_in_queue_event.clear()
-                elif self.epr_trigger.isSet():
+                elif self.epr_trigger.is_set():
                     self.transmit_epr_frame()
                     self.epr_lock.set()
                     self.epr_trigger.clear()
@@ -138,16 +139,17 @@ class Node:
 
     def transmit_epr_frame(self):
         qf = QuantumFrame(node=self)
-        qf.send_epr_frame(self.peer.host)
+        qf.send_epr_frame(self.peer)
         print("Transmitted")
         self.entanglement_buffer.extend(qf.extract_local_pairs())
 
     def transmit_data_frame(self, data):
         qf = QuantumFrame(node=self)
-        qf.send_data_frame(data, self.peer.host, self.entanglement_buffer)
+        qf.send_data_frame(data, self.peer, self.entanglement_buffer)
+
         print("Transmitted data")
 
-    def ackquire_buffer(self):
+    def acquire_buffer(self):
         buffer = self.entanglement_buffer
         self.entanglement_buffer = []
         return buffer
