@@ -1,7 +1,7 @@
 from qunetsim.backends.qutip_backend import QuTipBackend
 from qunetsim.components import Network
 
-from . import Node
+from .node import Node
 
 
 def routing_algorithm(di_graph, source, destination):

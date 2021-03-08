@@ -3,6 +3,11 @@ from threading import Event, Timer
 from qunetsim.components import Host
 from qunetsim.objects import Logger
 
+
+from .daemon_thread import DaemonThread
+from .quantum_frame import QuantumFrame
+
+
 Logger.DISABLED = True
 
 
@@ -31,6 +36,7 @@ class Node:
         self.epr_trigger = Event()
         self.epr_lock = Event()
         self.stop_signal = Event()
+        self.is_busy = Event()
         self.is_epr_initiator = is_epr_initiator
         self.timer_thread = None
         self.receiver_thread = None
@@ -135,16 +141,17 @@ class Node:
 
     def transmit_epr_frame(self):
         qf = QuantumFrame(node=self)
-        qf.send_epr_frame(self.peer.host)
+        qf.send_epr_frame(self.peer)
         print("Transmitted")
         self.entanglement_buffer.extend(qf.extract_local_pairs())
 
     def transmit_data_frame(self, data):
         qf = QuantumFrame(node=self)
-        qf.send_data_frame(data, self.peer.host, self.entanglement_buffer)
+        qf.send_data_frame(data, self.peer, self.entanglement_buffer)
+
         print("Transmitted data")
 
-    def ackquire_buffer(self):
+    def acquire_buffer(self):
         buffer = self.entanglement_buffer
         self.entanglement_buffer = []
         return buffer

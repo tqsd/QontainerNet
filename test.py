@@ -74,14 +74,17 @@ def testTopo(net):
     bridge.cmd("iptables -A FORWARD -i bridge -p all -j NFQUEUE --queue-num 1")
 
     bridge.cmd("echo '10.0.0.1 \n10.0.0.2' > /app/hosts.txt")
+
+    info("*** Running bridge.py in tmux session \n")
+    bridge.cmd("tmux new-session -d -s bridge 'python bridge.py' &")
     #bridge.cmd("python /app/bridge.py &")
 
-    #is_up = False
+    is_up = False
 
-#    info("*** Waiting for quantum bridge to initiate\n")
-#    while not is_up:
-#        if "log.txt" in bridge.cmd("ls /app/"):
-#            is_up = True
+    info("*** Waiting for quantum bridge to initiate\n")
+    while not is_up:
+        if "log.txt" in bridge.cmd("ls /app/"):
+            is_up = True
 
     info("*** Testing connections\n")
     CLI(net)

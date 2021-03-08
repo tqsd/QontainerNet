@@ -3,11 +3,16 @@ import time
 from qunetsim.objects import Logger
 from qunetsim.objects import Qubit
 
-from . import Node
 
+#Circular import otherwise
+try:
+    from .node import Node
+except ImportError:
+    import sys
+    Node = sys.modules[__package__ + '.node']
 
 class QuantumFrame:
-    def __init__(self, node: Node, mtu=5, await_ack=False):
+    def __init__(self, node: Node, mtu=80, await_ack=False):
         # MTU is in bytes
         self.type = None
         self.node = node
@@ -55,7 +60,7 @@ class QuantumFrame:
 
         self.creation_time = time.time()
 
-    def send_data_frame(self, data, destination, entanglement_buffer=[]):
+    def send_data_frame(self, data, destination_node:Node, entanglement_buffer=[]):
         """Send data frame, sequential or superdense ecnoded"""
         print("Sending data frame")
         self.raw_bits = data
@@ -66,13 +71,13 @@ class QuantumFrame:
         if len(entanglement_buffer) == 0:
             print("Sending sequentially")
             self.type = "DATA_SEQ"
-            self._send_data_frame_header(destination)
-            self._send_data_frame_seq(data, destination)
+            self._send_data_frame_header(destination_node.host)
+            self._send_data_frame_seq(data, destination_node.host)
         else:
             print("Sending superdense encoded")
             self.type = "DATA_SC"
-            self._send_data_frame_header(destination)
-            self._send_data_frame_sc(data, destination)
+            self._send_data_frame_header(destination_node.host)
+            self._send_data_frame_sc(data, destination_node.host)
         print("Data frame transmitted")
 
     def _send_data_frame_seq(self, data, destination):
@@ -85,8 +90,7 @@ class QuantumFrame:
                                             no_ack=True)
 
     def _send_data_frame_sc(self, data, destination):
-        buffer = self.node.ackquire_buffer()
-        print(buffer)
+        buffer = self.node.acquire_buffer()
         print(len(buffer))
         while len(data) > 0:
             if len(buffer) < 8:
@@ -130,13 +134,16 @@ class QuantumFrame:
 
         print("Header sent")
 
-    def send_epr_frame(self, destination):
+    def send_epr_frame(self, destination_node:Node):
+        if destination_node.is_busy.is_set():
+            print("Destination node is busy")
+            return
         header = '00'
         for h in header:
             q = Qubit(self.host)
             if h == '1':
                 q.X()
-            q_id = self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
+            q_id = self.host.send_qubit(destination_node.host.host_id, q, await_ack=self.await_ack,
                                         no_ack=True)
         for x in range(self.MTU):
             print("Sending " + str(x) + "/" + str(self.MTU) + " bytes")
@@ -146,7 +153,7 @@ class QuantumFrame:
                 q1.H()
                 q1.cnot(q2)
                 self.local_qubits.append(q1)
-                q_id = self.host.send_qubit(destination.host_id, q2, await_ack=self.await_ack,
+                q_id = self.host.send_qubit(destination_node.host.host_id, q2, await_ack=self.await_ack,
                                             no_ack=True)
 
     def extract_local_pairs(self):
@@ -159,11 +166,12 @@ class QuantumFrame:
             q = self.host.get_data_qubit(source.host_id)
             if q is not None:
                 m = q.measure()
+                self.node.is_busy.set()
                 if m:
                     header = header + '1'
                 else:
                     header = header + '0'
-        print("Header received")
+        print("Header received: "+ header)
         if header == '00':
             self._receive_epr(source)
         if header == '01':
@@ -172,10 +180,11 @@ class QuantumFrame:
         if header == '10':
             self.type = "DATA_SEQ"
             self._receive_data_seq(source)
+        self.node.is_busy.clear()
 
     def _receive_data_sc(self, source):
         print("Receiving data frame superdense encoded")
-        buffer = self.node.ackquire_buffer()
+        buffer = self.node.acquire_buffer()
         print(len(buffer))
         complete = False
         data = []
