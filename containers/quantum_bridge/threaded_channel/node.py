@@ -117,11 +117,11 @@ class Node:
             while True:
                 if self.stop_signal.is_set():
                     return
-                if self.packet_in_queue_event.isSet():
+                if self.packet_in_queue_event.is_set():
                     self.transmit_data_frame(self.packet_in_queue.pop(0))
                     if len(self.packet_in_queue) == 0:
                         self.packet_in_queue_event.clear()
-                elif self.epr_trigger.isSet():
+                elif self.epr_trigger.is_set():
                     self.transmit_epr_frame()
                     self.epr_lock.set()
                     self.epr_trigger.clear()

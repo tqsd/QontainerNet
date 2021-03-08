@@ -91,7 +91,7 @@ class QuantumFrame:
 
     def _send_data_frame_sc(self, data, destination):
         buffer = self.node.acquire_buffer()
-        print(len(buffer))
+        #print(len(buffer))
         while len(data) > 0:
             if len(buffer) < 8:
                 print("SENDING: No more local pairs available")
@@ -100,7 +100,7 @@ class QuantumFrame:
             for crumb in range(0, len(byte), 2):
                 crumb = ''.join(byte[crumb:crumb + 2])
                 q = buffer.pop(0)
-                print("sending crumb " + crumb)
+                #print("sending crumb " + crumb)
                 if crumb == '00':
                     q.I()
                 elif crumb == '10':
@@ -198,15 +198,15 @@ class QuantumFrame:
             crumb = ""
             crumb = crumb + str(q1.measure())
             crumb = crumb + str(q2.measure())
-            print("received " + crumb)
+            #print("received " + crumb)
             if len(data) == 0:
                 data.append(crumb)
                 continue
             elif len(data[-1]) < 8:
                 data[-1] = data[-1] + crumb
             else:
+                print(data[-1])
                 data.append(crumb)
-                print(data)
                 continue
 
             if data[-1] == self.termination_byte:
