@@ -3,6 +3,9 @@ from threading import Event, Timer
 from qunetsim.components import Host
 from qunetsim.objects import Logger
 
+from . import DaemonThread
+from . import QuantumFrame
+
 Logger.DISABLED = True
 
 
