@@ -26,7 +26,7 @@ class Node:
         self.network.add_host(self.host)
         self.entanglement_buffer = []
         self.queue_size = queue_size
-        self.frame_size = 48
+        self.frame_size = frame_size
         self.packet_in_queue_event = Event()
         self.packet_out_queue_event = Event()
         self.packet_in_queue = []

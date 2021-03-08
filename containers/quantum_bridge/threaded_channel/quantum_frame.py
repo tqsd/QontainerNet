@@ -4,15 +4,8 @@ from qunetsim.objects import Logger
 from qunetsim.objects import Qubit
 
 
-#Circular import otherwise
-try:
-    from .node import Node
-except ImportError:
-    import sys
-    Node = sys.modules[__package__ + '.node']
-
 class QuantumFrame:
-    def __init__(self, node: Node, mtu=80, await_ack=False):
+    def __init__(self, node, mtu=80, await_ack=False):
         # MTU is in bytes
         self.type = None
         self.node = node
@@ -60,7 +53,7 @@ class QuantumFrame:
 
         self.creation_time = time.time()
 
-    def send_data_frame(self, data, destination_node:Node, entanglement_buffer=[]):
+    def send_data_frame(self, data, destination_node, entanglement_buffer=[]):
         """Send data frame, sequential or superdense ecnoded"""
         print("Sending data frame")
         self.raw_bits = data
@@ -91,7 +84,7 @@ class QuantumFrame:
 
     def _send_data_frame_sc(self, data, destination):
         buffer = self.node.acquire_buffer()
-        #print(len(buffer))
+        # print(len(buffer))
         while len(data) > 0:
             if len(buffer) < 8:
                 print("SENDING: No more local pairs available")
@@ -100,7 +93,7 @@ class QuantumFrame:
             for crumb in range(0, len(byte), 2):
                 crumb = ''.join(byte[crumb:crumb + 2])
                 q = buffer.pop(0)
-                #print("sending crumb " + crumb)
+                # print("sending crumb " + crumb)
                 if crumb == '00':
                     q.I()
                 elif crumb == '10':
@@ -134,7 +127,7 @@ class QuantumFrame:
 
         print("Header sent")
 
-    def send_epr_frame(self, destination_node:Node):
+    def send_epr_frame(self, destination_node):
         if destination_node.is_busy.is_set():
             print("Destination node is busy")
             return
@@ -143,8 +136,8 @@ class QuantumFrame:
             q = Qubit(self.host)
             if h == '1':
                 q.X()
-            q_id = self.host.send_qubit(destination_node.host.host_id, q, await_ack=self.await_ack,
-                                        no_ack=True)
+            self.host.send_qubit(destination_node.host.host_id, q, await_ack=self.await_ack,
+                                 no_ack=True)
         for x in range(self.MTU):
             print("Sending " + str(x) + "/" + str(self.MTU) + " bytes")
             for i in range(8):
@@ -153,8 +146,8 @@ class QuantumFrame:
                 q1.H()
                 q1.cnot(q2)
                 self.local_qubits.append(q1)
-                q_id = self.host.send_qubit(destination_node.host.host_id, q2, await_ack=self.await_ack,
-                                            no_ack=True)
+                self.host.send_qubit(destination_node.host.host_id, q2, await_ack=self.await_ack,
+                                     no_ack=True)
 
     def extract_local_pairs(self):
         return self.local_qubits
@@ -171,7 +164,7 @@ class QuantumFrame:
                     header = header + '1'
                 else:
                     header = header + '0'
-        print("Header received: "+ header)
+        print("Header received: " + header)
         if header == '00':
             self._receive_epr(source)
         if header == '01':
@@ -198,7 +191,7 @@ class QuantumFrame:
             crumb = ""
             crumb = crumb + str(q1.measure())
             crumb = crumb + str(q2.measure())
-            #print("received " + crumb)
+            # print("received " + crumb)
             if len(data) == 0:
                 data.append(crumb)
                 continue
