@@ -35,11 +35,15 @@ with open("/app/hosts.txt", "r") as host_file:
     for line in host_file.readlines():
         hosts.append(line.rstrip())
 
-quantum_protocol = Channel(hosts)
+print(hosts)
+
+#quantum_protocol = Channel(hosts)
 
 def packet_diff(in_bits:list, out_bits:list):
+    print("PACKET DIFF")
     print(in_bits)
-    print(out_bist)
+    print(out_bits)
+    return
     for i in range(len(out_bits)):
         if in_bits[i] != out_bits[i]:
             print(in_bits[i], out_bits[i])
@@ -52,20 +56,24 @@ def packet_processing(pkt):
         packet = IP(pkt.get_payload())
         packet_bits = to_bit_array(packet)
 
-        #TODO: EXTRACT SOURCE IP AND PASS IT AS ARGUMENT TO TRANSMIT PACKET METHOD
         source_address = packet[IP].src
-        new_packet_bits = quantum_protocol.transmit_packet(packet_bits, source_address)
+        #new_packet_bits = quantum_protocol.transmit_packet(packet_bits, source_address)
+        sleep_time = 1
+        print(f"sleeping for {sleep_time}s")
+        time.sleep(sleep_time)
+        #new_packet = IP(from_bit_array(new_packet_bits))
+        send(packet)
 
-        new_packet = IP(from_bit_array(new_packet_bits))
-
-        send(new_packet)
+        return
         end = time.time()
         logfile.write("PACKET TRANSMITTED_________________\n")
         logfile.write(hexdump(packet, dump=True) + "\n")
         logfile.write(hexdump(new_packet, dump=True)+ "\n")
         logfile.write("Transmission time:" + str(end-start) + "\n")
+        packet_diff(packet_bits, new_packet_bits)
         packet.show()
         new_packet.show()
+
 
 try:
     os.remove(LOGFILE)

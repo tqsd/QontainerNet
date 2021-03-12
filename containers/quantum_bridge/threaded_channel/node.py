@@ -3,8 +3,8 @@ from threading import Event, Timer
 from qunetsim.components import Host
 from qunetsim.objects import Logger
 
-from . import DaemonThread
-from . import QuantumFrame
+from .daemon_thread import DaemonThread
+from .quantum_frame import QuantumFrame
 
 Logger.DISABLED = True
 
@@ -19,7 +19,7 @@ class Node:
     """
 
     def __init__(self, host: str, network, backend, queue_size=512, is_epr_initiator=False, frame_size=48,
-                 epr_transmission_time=100):
+                 epr_transmission_time=20):
         self.host = Host(host, backend)
         self.host.delay = 0
         self.network = network

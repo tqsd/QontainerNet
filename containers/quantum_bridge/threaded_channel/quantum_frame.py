@@ -17,6 +17,7 @@ class QuantumFrame:
         # Performance statistics
         self.start_time = time.time()
         self.creation_time = None
+        self.deletion_time = None
         self.received_time = None
         self.measurement_time = None
         self.await_ack = await_ack
@@ -55,6 +56,7 @@ class QuantumFrame:
 
     def send_data_frame(self, data, destination_node, entanglement_buffer=[]):
         """Send data frame, sequential or superdense ecnoded"""
+        self.creation_time = time.time()
         print("Sending data frame")
         self.raw_bits = data
         data.append(self.termination_byte)
@@ -109,6 +111,9 @@ class QuantumFrame:
             print("Continuing with sequential sending")
             print(data)
             self._send_data_frame_seq(data, destination)
+        else:
+            self.deletion_time = time.time()
+            print("FRAME PROCESSING TIME:" + str(self.deletion_time-self.creation_time))
         self.node.release_buffer(buffer)
 
     def _send_data_frame_header(self, destination):
@@ -128,7 +133,7 @@ class QuantumFrame:
         print("Header sent")
 
     def send_epr_frame(self, destination_node):
-        if destination_node.is_busy.is_set():
+        if destination_node.is_busy.is_set() or self.node.is_busy.is_set():
             print("Destination node is busy")
             return
         header = '00'
@@ -198,7 +203,7 @@ class QuantumFrame:
             elif len(data[-1]) < 8:
                 data[-1] = data[-1] + crumb
             else:
-                print(data[-1])
+                print(data[-1], len(data))
                 data.append(crumb)
                 continue
 
@@ -226,7 +231,7 @@ class QuantumFrame:
                 data[-1] = data[-1] + bit
             else:
                 data.append(bit)
-                print(data)
+                print(data[-1], len(data))
                 continue
 
             if data[-1] == self.termination_byte:
@@ -236,7 +241,7 @@ class QuantumFrame:
     def _receive_epr(self, source):
         self.type = 'EPR'
         for x in range(self.MTU):
-            print("Receiving " + str(x + 1) + " byte of " + str(self.MTU))
+            print("Receiving " + str(x + 1) + "/" + str(self.MTU) + "bytes")
             for i in range(8):
                 q = self.host.get_data_qubit(source.host_id)
                 while q is None:
