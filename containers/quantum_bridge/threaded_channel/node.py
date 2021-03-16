@@ -150,7 +150,6 @@ class Node:
         qf = QuantumFrame(node=self)
         qf.send_data_frame(data, self.peer, self.entanglement_buffer)
 
-        print("Transmitted data")
 
     def acquire_buffer(self):
         buffer = self.entanglement_buffer

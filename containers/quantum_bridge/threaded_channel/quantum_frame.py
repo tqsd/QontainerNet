@@ -9,6 +9,8 @@ def simple_logger(host, log_line):
         log_file.write(log_line+"\n")
 
 EPR_DICT_FOR_LOGGING = {}
+SENDER_EPR_QUBIT_IDS = []
+RECEIVER_EPR_QUBIT_IDS = []
 
 class QuantumFrame:
     """
@@ -124,11 +126,15 @@ class QuantumFrame:
                 self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
                                      no_ack=True)
                 qbyte_ids.append(q.id)
-            remote_q_ids = "\n".join([EPR_DICT_FOR_LOGGING[x] for x in qbyte_ids])
-            qbyte_ids = "\n".join(qbyte_ids)
-            simple_logger(self.node.host.host_id,f"""SENT DATA SD: {byte}\n TRANSMITTING Q_IDS: \n {qbyte_ids}
-            REMOTE_Q_IDS: \n {remote_q_ids}
-            """)
+
+
+            remote_q_ids = [EPR_DICT_FOR_LOGGING[x] for x in qbyte_ids]
+            log_list = []
+            for i, remote in enumerate(remote_q_ids):
+                log_list.append(" , ".join([qbyte_ids[i], remote]))
+            log_list = "\n".join(log_list)
+
+            simple_logger(self.node.host.host_id,f"""SENT DATA SD: {byte}\n SENT_Q_IDS, REMOTE_Q_IDS: \n {log_list}""")
             print(f"{self.node.host.host_id} is sending {byte} super-dense")
             print(qbyte_ids)
 
@@ -183,9 +189,12 @@ class QuantumFrame:
                                      no_ack=True)
                 EPR_DICT_FOR_LOGGING[q1.id]=q2.id
                 simple_logger(self.node.host.host_id,
-                            f"LOCAL_EPR: {q1.id}")
-                simple_logger(self.node.host.host_id,
-                            f"REMOTE_EPR: {q2.id}")
+                            f"-EPR \n local: {q1.id} \n remote: {q2.id}")
+        SENDER_EPR_QUBIT_IDS = [x.id for x in self.local_qubits]
+        for q in self.local_qubits:
+            q = q.id
+            simple_logger(self.node.host.host_id+"-epr",
+                          f"{q} - {EPR_DICT_FOR_LOGGING[q]}")
 
     def extract_local_pairs(self):
         return self.local_qubits
@@ -233,7 +242,7 @@ class QuantumFrame:
                 continue
             rec_qbyte_ids.append(q1.id)
             q2 = buffer.pop(0)
-            buf_qbyte_ids.append(q2)
+            buf_qbyte_ids.append(q2.id)
             q1.cnot(q2)
             q1.H()
             crumb = ""
@@ -252,12 +261,16 @@ class QuantumFrame:
                 print(f"""{self.node.host.host_id} has received {data[-1]}
                 superdense, current packet lenght: {len(data)}""")
 
-                rec_qbyte_ids = "\n".join(rec_qbyte_ids)
-                buf_qbyte_ids = "\n".join(buf_qbyte_ids)
+                #rec_qbyte_ids = "\n".join(rec_qbyte_ids)
+                #buf_qbyte_ids = "\n".join(buf_qbyte_ids)
+
+                log_list = []
+                for i, rec in enumerate(rec_qbyte_ids):
+                    log_list.append(" , ".join([rec, buf_qbyte_ids[i]]))
+                log_list = "\n".join(log_list)
 
                 simple_logger(self.node.host.host_id,
-                              f"""RECEIVED DATA SD: {data[-1]}\nRECEIVED_Q_IDS:{rec_qbyte_ids}
-                              LOCAL_Q_IDS:\n{buf_qbyte_ids}
+                              f"""RECEIVED DATA SD: {data[-1]}\nRECEIVED_Q_IDS, BUFF_IDS:\n{log_list}
                               """)
                 buf_qbyte_ids = []
                 rec_qbyte_ids = []
@@ -302,4 +315,15 @@ class QuantumFrame:
                 while q is None:
                     q = self.host.get_data_qubit(source.host_id)
                 self.local_qubits.append(q)
-        Logger.get_instance().log(str(self.host.host_id) + "received EPR frame")
+        simple_logger(self.node.host.host_id, "---- EPR RECEIVED")
+        for q in self.local_qubits:
+            simple_logger(self.node.host.host_id+"-epr", str(q.id))
+        RECEIVER_EPR_QUBIT_IDS = [x.id for x in self.local_qubits]
+        order_flag = True
+        for i, s_id in enumerate(SENDER_EPR_QUBIT_IDS):
+            if RECEIVER_EPR_QUBIT_IDS[i] != EPR_DICT_FOR_LOGGING[s_id]:
+                order_flag = False
+        if order_flag:
+            print("No errors in epr transmission -> order is ok")
+        else:
+            print("Errors in epr transmission -> order is not ok")
