@@ -40,6 +40,7 @@ class Node:
         self.receiver_thread = None
         self.sender_thread = None
         self.peer = None
+        self.max_queue_size = 8*1000
         self.epr_transmission_time = epr_transmission_time
 
     def connect(self, node):
@@ -80,7 +81,10 @@ class Node:
         """ Triggers epr frame transmission periodically """
         if self.stop_signal.is_set():
             return
-        print("Initiating EPR Transmission")
+        if len(self.entanglement_buffer) > self.max_queue_size:
+            print("Buffer is full")
+            return
+        print(f"{self.host.host_id} initiated EPR Transmission")
         self.epr_trigger.set()
         self.epr_lock.wait()
         self.epr_trigger.clear()
@@ -140,7 +144,6 @@ class Node:
     def transmit_epr_frame(self):
         qf = QuantumFrame(node=self)
         qf.send_epr_frame(self.peer)
-        print("Transmitted")
         self.entanglement_buffer.extend(qf.extract_local_pairs())
 
     def transmit_data_frame(self, data):

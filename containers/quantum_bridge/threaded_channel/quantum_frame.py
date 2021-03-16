@@ -3,8 +3,17 @@ import time
 from qunetsim.objects import Logger
 from qunetsim.objects import Qubit
 
+def simple_logger(host, log_line):
+    """Simple Logger function to test qubits"""
+    with open(str(host)+".log", "a") as log_file:
+        log_file.write(log_line+"\n")
+
+EPR_DICT_FOR_LOGGING = {}
 
 class QuantumFrame:
+    """
+    Quantum Frame class, handles actual transmition 
+    """
     def __init__(self, node, mtu=80, await_ack=False):
         # MTU is in bytes
         self.type = None
@@ -60,6 +69,7 @@ class QuantumFrame:
         print("Sending data frame")
         self.raw_bits = data
         data.append(self.termination_byte)
+        print(f"{self.node.host.host_id} is sending packet of lenght {len(data)}")
         if self.type is not None:
             raise Exception("Quantum Frame type already defined")
 
@@ -77,12 +87,17 @@ class QuantumFrame:
 
     def _send_data_frame_seq(self, data, destination):
         for byte in data:
+            qbyte_ids = []
             for bit in byte:
                 q = Qubit(self.host)
                 if bit == '1':
                     q.X()
-                q_id = self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
+                self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
                                             no_ack=True)
+                qbyte_ids.append(q.id)
+
+            print(f"{self.node.host.host_id} has sent {byte} sequentially")
+            print(qbyte_ids)
 
     def _send_data_frame_sc(self, data, destination):
         buffer = self.node.acquire_buffer()
@@ -92,6 +107,7 @@ class QuantumFrame:
                 print("SENDING: No more local pairs available")
                 break
             byte = data.pop(0)
+            qbyte_ids = []
             for crumb in range(0, len(byte), 2):
                 crumb = ''.join(byte[crumb:crumb + 2])
                 q = buffer.pop(0)
@@ -105,8 +121,17 @@ class QuantumFrame:
                 elif crumb == '11':
                     q.X()
                     q.Z()
-                q_id = self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
-                                            no_ack=True)
+                self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
+                                     no_ack=True)
+                qbyte_ids.append(q.id)
+            remote_q_ids = "\n".join([EPR_DICT_FOR_LOGGING[x] for x in qbyte_ids])
+            qbyte_ids = "\n".join(qbyte_ids)
+            simple_logger(self.node.host.host_id,f"""SENT DATA SD: {byte}\n TRANSMITTING Q_IDS: \n {qbyte_ids}
+            REMOTE_Q_IDS: \n {remote_q_ids}
+            """)
+            print(f"{self.node.host.host_id} is sending {byte} super-dense")
+            print(qbyte_ids)
+
         if len(data) > 0:
             print("Continuing with sequential sending")
             print(data)
@@ -127,6 +152,7 @@ class QuantumFrame:
             q = Qubit(self.host)
             if h == '1':
                 q.X()
+            print(f"HEADER SENDING: {h} with id {q.id}")
             q_id = self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
                                         no_ack=True)
 
@@ -134,17 +160,19 @@ class QuantumFrame:
 
     def send_epr_frame(self, destination_node):
         if destination_node.is_busy.is_set() or self.node.is_busy.is_set():
-            print("Destination node is busy")
+            print(f"{self.node.host.host_id} is trying to transmit: Destination node is busy")
             return
         header = '00'
         for h in header:
             q = Qubit(self.host)
+            simple_logger(self.node.host.host_id,
+                          f"Header: {h}\n {q.id}")
             if h == '1':
                 q.X()
             self.host.send_qubit(destination_node.host.host_id, q, await_ack=self.await_ack,
                                  no_ack=True)
         for x in range(self.MTU):
-            print("Sending " + str(x) + "/" + str(self.MTU) + " bytes")
+            #print("Sending " + str(x) + "/" + str(self.MTU) + " bytes")
             for i in range(8):
                 q1 = Qubit(self.host)
                 q2 = Qubit(self.host)
@@ -153,6 +181,11 @@ class QuantumFrame:
                 self.local_qubits.append(q1)
                 self.host.send_qubit(destination_node.host.host_id, q2, await_ack=self.await_ack,
                                      no_ack=True)
+                EPR_DICT_FOR_LOGGING[q1.id]=q2.id
+                simple_logger(self.node.host.host_id,
+                            f"LOCAL_EPR: {q1.id}")
+                simple_logger(self.node.host.host_id,
+                            f"REMOTE_EPR: {q2.id}")
 
     def extract_local_pairs(self):
         return self.local_qubits
@@ -164,7 +197,9 @@ class QuantumFrame:
             q = self.host.get_data_qubit(source.host_id)
             if q is not None:
                 m = q.measure()
+                print(f"HEADER RECEIVING {m} wiht id {q.id}")
                 self.node.is_busy.set()
+                simple_logger(self.node.host.host_id, f"Header qubit received: {q.id}")
                 if m:
                     header = header + '1'
                 else:
@@ -178,6 +213,10 @@ class QuantumFrame:
         if header == '10':
             self.type = "DATA_SEQ"
             self._receive_data_seq(source)
+        if header == '11':
+            self.type = "UNDEFINED"
+            print("ERROR, header:11 undefined")
+        print(f"{self.node.host.host_id} received a packet of type {self.type}")
         self.node.is_busy.clear()
 
     def _receive_data_sc(self, source):
@@ -186,11 +225,15 @@ class QuantumFrame:
         print(len(buffer))
         complete = False
         data = []
+        rec_qbyte_ids = []
+        buf_qbyte_ids = []
         while len(buffer) > 7 and not complete:
             q1 = self.host.get_data_qubit(source.host_id)
             if q1 is None:
                 continue
+            rec_qbyte_ids.append(q1.id)
             q2 = buffer.pop(0)
+            buf_qbyte_ids.append(q2)
             q1.cnot(q2)
             q1.H()
             crumb = ""
@@ -203,9 +246,21 @@ class QuantumFrame:
             elif len(data[-1]) < 8:
                 data[-1] = data[-1] + crumb
             else:
-                print(data[-1], len(data))
                 data.append(crumb)
-                continue
+
+            if len(data[-1])==8:
+                print(f"""{self.node.host.host_id} has received {data[-1]}
+                superdense, current packet lenght: {len(data)}""")
+
+                rec_qbyte_ids = "\n".join(rec_qbyte_ids)
+                buf_qbyte_ids = "\n".join(buf_qbyte_ids)
+
+                simple_logger(self.node.host.host_id,
+                              f"""RECEIVED DATA SD: {data[-1]}\nRECEIVED_Q_IDS:{rec_qbyte_ids}
+                              LOCAL_Q_IDS:\n{buf_qbyte_ids}
+                              """)
+                buf_qbyte_ids = []
+                rec_qbyte_ids = []
 
             if data[-1] == self.termination_byte:
                 complete = True
@@ -230,8 +285,8 @@ class QuantumFrame:
             elif len(data[-1]) < 8:
                 data[-1] = data[-1] + bit
             else:
-                data.append(bit)
                 print(data[-1], len(data))
+                data.append(bit)
                 continue
 
             if data[-1] == self.termination_byte:
@@ -241,7 +296,7 @@ class QuantumFrame:
     def _receive_epr(self, source):
         self.type = 'EPR'
         for x in range(self.MTU):
-            print("Receiving " + str(x + 1) + "/" + str(self.MTU) + "bytes")
+            #print("Receiving " + str(x + 1) + "/" + str(self.MTU) + "bytes")
             for i in range(8):
                 q = self.host.get_data_qubit(source.host_id)
                 while q is None:

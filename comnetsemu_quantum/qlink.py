@@ -41,7 +41,7 @@ class Qontainernet(Containernet):
 
         is_up = False
 
-        info("*** Waiting for quantum bridge to initiate\n")
+        info("\n*** Waiting for quantum bridge to initiate\n")
         while not is_up:
             if "log.txt" in bridge.cmd("ls /app/"):
                 is_up = True
