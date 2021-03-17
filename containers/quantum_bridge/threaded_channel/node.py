@@ -1,4 +1,5 @@
 from threading import Event, Timer
+from queue import SimpleQueue
 
 from qunetsim.components import Host
 from qunetsim.objects import Logger
@@ -25,8 +26,11 @@ class Node:
         self.network = network
         self.network.add_host(self.host)
         self.entanglement_buffer = []
+        #Fifo queue for epr qubits
+        self.entanglement_queue = SimpleQueue()
         self.queue_size = queue_size
         self.frame_size = frame_size
+        #Packet management before/after channel transmission
         self.packet_in_queue_event = Event()
         self.packet_out_queue_event = Event()
         self.packet_in_queue = []
