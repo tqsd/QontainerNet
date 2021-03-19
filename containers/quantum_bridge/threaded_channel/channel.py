@@ -1,5 +1,8 @@
 from qunetsim.backends.qutip_backend import QuTipBackend
 from qunetsim.components import Network
+from qunetsim.objects import Logger
+
+Logger.DISABLED = False
 
 from .node import Node
 

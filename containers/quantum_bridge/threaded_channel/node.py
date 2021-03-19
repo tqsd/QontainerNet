@@ -1,5 +1,5 @@
 from threading import Event, Timer
-from queue import SimpleQueue
+import queue 
 
 from qunetsim.components import Host
 from qunetsim.objects import Logger
@@ -25,9 +25,7 @@ class Node:
         self.host.delay = 0
         self.network = network
         self.network.add_host(self.host)
-        self.entanglement_buffer = []
-        #Fifo queue for epr qubits
-        self.entanglement_queue = SimpleQueue()
+        self.entanglement_buffer = queue.Queue()
         self.queue_size = queue_size
         self.frame_size = frame_size
         #Packet management before/after channel transmission
@@ -85,9 +83,12 @@ class Node:
         """ Triggers epr frame transmission periodically """
         if self.stop_signal.is_set():
             return
-        if len(self.entanglement_buffer) > self.max_queue_size:
-            print("Buffer is full")
+        if self.entanglement_buffer.qsize() > self.max_queue_size:
+            print("EPR QUEUE IS FULL")
             return
+        #if len(self.entanglement_buffer) > self.max_queue_size:
+        #    print("Buffer is full")
+        #    return
         print(f"{self.host.host_id} initiated EPR Transmission")
         self.epr_trigger.set()
         self.epr_lock.wait()
@@ -106,8 +107,12 @@ class Node:
                 qf = QuantumFrame(node=self)
                 qf.receive(self.peer.host)
                 if qf.type == 'EPR':
-                    self.entanglement_buffer.extend(qf.extract_local_pairs())
-                    print(str(len(self.entanglement_buffer)) + " available local pairs")
+                    for q in qf.extract_local_pairs():
+                        #print(q.id)
+                        self.entanglement_buffer.put(q)
+                    #map(self.entanglement_buffer.put, qf.extract_local_pairs())
+                    #self.entanglement_buffer.extend(qf.extract_local_pairs())
+                    print(str(self.entanglement_buffer.qsize()) + " available local pairs")
                 else:
                     print("DATA FRAME RECEIVED -- " + qf.type)
                     self.packet_out_queue.append(qf.raw_bits)
@@ -148,17 +153,13 @@ class Node:
     def transmit_epr_frame(self):
         qf = QuantumFrame(node=self)
         qf.send_epr_frame(self.peer)
-        self.entanglement_buffer.extend(qf.extract_local_pairs())
+        for q in qf.extract_local_pairs():
+            self.entanglement_buffer.put(q)
+        print("NUM OF QUBITS IN SENDER BUFFER", self.entanglement_buffer.qsize())
+        #map(self.entanglement_buffer.put, qf.extract_local_pairs())
+        #self.entanglement_buffer.extend(qf.extract_local_pairs())
 
     def transmit_data_frame(self, data):
         qf = QuantumFrame(node=self)
         qf.send_data_frame(data, self.peer, self.entanglement_buffer)
 
-
-    def acquire_buffer(self):
-        buffer = self.entanglement_buffer
-        self.entanglement_buffer = []
-        return buffer
-
-    def release_buffer(self, buffer):
-        self.entanglement_buffer = buffer + self.entanglement_buffer
