@@ -31,7 +31,12 @@ RUN pip3 install NetfilterQueue
 RUN pip3 install qunetsim
 RUN pip3 install projectq
 RUN pip3 install qutip
+RUN pip3 install speedtest-cli
 RUN python3 --version
+
+RUN echo 'alias br="tmux a -t bridge"' >>~/.bashrc
+RUN echo 'alias h="tmux a -t h"' >>~/.bashrc
+RUN echo 'alias pong="fping 10.0.0.2 -c 1 -t 100000"' >>~/.bashrc
 
 # Force matplotlib to generate the font cache
 RUN python3 -c 'import matplotlib.pyplot'

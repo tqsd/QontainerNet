@@ -16,6 +16,7 @@ lazy-object-proxy==1.5.2
 matplotlib==3.3.4
 mccabe==0.6.1
 networkx==2.5
+nose2==0.9.2
 numpy==1.20.1
 packaging==20.9
 parso==0.8.1
