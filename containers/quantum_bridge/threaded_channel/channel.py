@@ -19,6 +19,9 @@ class Channel:
     """
 
     def __init__(self, hosts, backend=QuTipBackend()):
+        """
+        Inits Channel
+        """
         self.backend = backend
         self.network = Network.get_instance()
         self.network.delay = 0
@@ -34,11 +37,17 @@ class Channel:
         self.node_b.host.start()
 
     def transmit_packet(self, packet_bits, source_host):
-        """ Passes classical packet through quantum channel"""
-        print(packet_bits)
-        print(len(packet_bits))
-        source_node = [node for node in [self.node_a, self.node_b] if node.host.host_id == source_host][0]
-        destination_node = [node for node in [self.node_a, self.node_b] if node.host.host_id != source_host][0]
+        """
+        Passes packet to appropriate node to be sent through quantum link.
+        Waits until packet was received, and then returns the bits that came out
+        on the other side
+
+        PUBLIC METHOD
+        """
+        source_node = [node for node in [self.node_a, self.node_b]
+                       if node.host.host_id == source_host][0]
+        destination_node = [node for node in [self.node_a, self.node_b]
+                            if node.host.host_id != source_host][0]
         source_node.add_to_in_queue(packet_bits)
         out_bits = destination_node.get_from_out_queue()
         return out_bits

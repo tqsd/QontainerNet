@@ -19,15 +19,29 @@ class DaemonThread(Thread):
 
 
 class Channel:
+    """
+    Basic channel, to force implementation of two methods
+    """
     def __init__(self):
         raise NotImplementedError
 
     def transmit_packet(self, packet_bits: list):
+        """
+        Should transmit packet through channel
+        """
         raise NotImplementedError
 
 
 class SimpleBufferedQuantumChannel(Channel):
+    """
+    Simple buffered quantum link
+    has two hosts direction of transmission is not important
+    """
+
     def __init__(self, buffer_size=1000, epr_gen_time=5, epr_frame_length=48):
+        """
+        Inits Simple Buffered Quantum Channel
+        """
         super().__init__()
         self.buffer_size = buffer_size
         self.buffer = []
@@ -44,11 +58,17 @@ class SimpleBufferedQuantumChannel(Channel):
         self.epr_gen_schedule = None
 
     def entanglement_generation(self):
+        """
+        Generates entanglement
+        """
         self.epr_gen_schedule = sched.scheduler(time.time, time.sleep)
         self.epr_gen_schedule.enter(self.epr_gen_int, 1, self._entanglement_generation_thread)
         self.epr_gen_schedule.run(blocking=True)
 
     def _entanglement_generation_thread(self):
+        """
+        Thread that generates epr periodically
+        """
         if not self.is_free.is_set():
             print("Waiting for is_free flag")
         self.is_free.wait()
@@ -58,8 +78,12 @@ class SimpleBufferedQuantumChannel(Channel):
         self.is_free.set()
         self.epr_gen_schedule.enter(self.epr_gen_int, 1, self._entanglement_generation_thread)
 
-    # Generate entanglement -> This function runs in a separate thread
     def _entanglement_generation(self):
+        """
+        Method that handles epr generation
+
+        PRIVATE METHOD
+        """
         print("--------EPR GENERATION--------")
         start = time.time()
         for i in range(self.epr_frame_length):
@@ -71,6 +95,11 @@ class SimpleBufferedQuantumChannel(Channel):
         print("EPR BUFFER: ", str(len(self.buffer)) + "/" + str(self.buffer_size))
 
     def _generate_epr_tuple(self):
+        """
+        Generate epr tuple
+
+        PRIVATE METHOD
+        """
         q1 = Qubit(self.host)
         q2 = Qubit(self.host)
         q1.H()
@@ -78,6 +107,11 @@ class SimpleBufferedQuantumChannel(Channel):
         return (q1, q2)
 
     def transmit_packet(self, packet_bits: list):
+        """
+        Handles data frame transmission
+
+        PUBLIC METHOD
+        """
         if not self.is_free.is_set():
             print("Waiting for is_free flag")
         self.is_free.wait()
@@ -95,6 +129,10 @@ class SimpleBufferedQuantumChannel(Channel):
         return new_packet_bits
 
     def _transmit_packet_dens(self, packet_bits: list):
+        """
+        Handles transmission of packet supredensly
+        PRIVATE METHOD
+        """
         received_packet = []
         for byte in packet_bits:
             print(byte)
@@ -102,6 +140,10 @@ class SimpleBufferedQuantumChannel(Channel):
         return received_packet
 
     def _transmit_byte_dens(self, byte):
+        """
+        Handles transmissoin od byte superdensly
+        PRIVATE METHOD
+        """
         received_byte = ""
         for i in range(len(byte), 2):
             print(byte[i:i + 1])
@@ -109,6 +151,10 @@ class SimpleBufferedQuantumChannel(Channel):
         return received_byte
 
     def _transmit_crumb_dens(self, crumb):
+        """
+        Handles transmission of crumb
+        PRIVATE METHOD
+        """
         epr = self.buffer.pop(0)
         self._dens_encode(crumb, epr[0])
         self._transmit_qubit(epr[0])
@@ -120,6 +166,10 @@ class SimpleBufferedQuantumChannel(Channel):
 
     @staticmethod
     def _dens_encode(crumbs, q):
+        """
+        Handles superdense encoding
+        PRIVATE METHOD
+        """
         if crumbs == '00':
             q.I()
         elif crumbs == '10':
@@ -132,6 +182,10 @@ class SimpleBufferedQuantumChannel(Channel):
 
     @staticmethod
     def _dens_decode(qubits):
+        """
+        Handles supredense decoding
+        PRIVATE METHOD
+        """
         qubits[0].cnot(qubits[1])
         qubits[0].H()
         meas = [None, None]
@@ -141,6 +195,11 @@ class SimpleBufferedQuantumChannel(Channel):
         return str(meas[0]) + str(meas[1])
 
     def _transmit_packet_seq(self, packet_bits: list):
+        """
+        Handles transmission of packet in a sequential manner
+
+        PRIVATE METHOD
+        """
         received_packet = []
         print(packet_bits)
         for byte in packet_bits:
@@ -160,7 +219,12 @@ class SimpleBufferedQuantumChannel(Channel):
 
 
 class SimpleQuantumChannel:
+    """
+    Simple Quantum Channel
+    Just encodes bits in qubits and measures them
+    """
     def __init__(self):
+        """Init method"""
         backend = ProjectQBackend()
         self.network = Network.get_instance()
         self.nodes = ["A", "B"]
@@ -176,21 +240,21 @@ class SimpleQuantumChannel:
         self.network.add_host(self.hosts[1])
 
     def transmit_packet(self, packet_bits):
+        """
+        Handles transmission of a packet
+        PUBLIC METHOD
+        """
         received_packet = []
         for byte in packet_bits:
             received_packet.append(self._transmit_byte(byte))
         return received_packet
 
     def _transmit_byte(self, byte):
+        """
+        Handles transmission of single byte
+        PRIVATE METHOD
+        """
         received_byte = ""
-        '''
-        for bit in byte:
-            q = Qubit(self.hosts[0])
-            if bit == '1':
-                q.X()
-            received_byte = received_byte + str(q.measure())
-        return received_byte
-        '''
         q_byte = []
         for bit in byte:
             q = Qubit(self.hosts[0])
@@ -200,10 +264,7 @@ class SimpleQuantumChannel:
             q_id = self.hosts[0].send_qubit('B', q, await_ack=False)
             q_byte.append(q_id)
             print(str(len(received_byte)) + "/" + str(len(byte)))
-            # received_byte = received_byte + self._transmit_bit(bit)
-            # received_byte = received_byte + q.measure()
 
-        q_received = []
         for q_id in q_byte:
             q_rec = self.hosts[1].get_data_qubit('A', q_id)
             print(q_id)
@@ -213,6 +274,11 @@ class SimpleQuantumChannel:
         return received_byte
 
     def _transmit_bit(self, bit):
+        """
+        Transmits single bit
+
+        PRIVATE METHOD
+        """
         q = Qubit(self.hosts[0])
         if bit == '1':
             q.X()
