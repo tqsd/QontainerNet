@@ -3,8 +3,19 @@ from mininet.log import info
 
 
 class Qontainernet(Containernet):
+    """
+    Qontainernet is extension of Containernet
+    It adds quantum links; Currently supports only one link
+    """
 
     def add_quantum_link(self, h1, h2, ip_address: str, bw=10, delay="100ms"):
+        """
+        Adds quantum link in the folloving way:
+
+        q_container
+            ┌┴┐
+        h1 -┘ └- h2
+        """
 
         self.bridge = self.addDockerHost(
             "bridge",
@@ -41,7 +52,10 @@ class Qontainernet(Containernet):
         return self.bridge
 
     def _start(self):
-        """Initiate bridge.py and wait until it's up and running"""
+        """
+        Initiate bridge.py and wait until it's up and running
+        PRIVATE METHOD
+        """
         self.bridge.cmd("tmux new-session -d -s bridge 'python bridge.py' &")
 
         is_up = False
