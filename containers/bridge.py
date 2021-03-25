@@ -13,6 +13,7 @@ from qunetsim.objects import Qubit
 from scapy.all import *
 
 from quantum_bridge.threaded_channel.channel import Channel
+from quantum_bridge.simple_bridge import SimpleChannel
 
 
 LOGFILE = "/app/log.txt"
@@ -47,7 +48,7 @@ with open("/app/hosts.txt", "r") as host_file:
 
 print(hosts)
 
-quantum_protocol = Channel(hosts)
+quantum_protocol = SimpleChannel()
 
 def packet_diff(in_bits:list, out_bits:list):
     """
