@@ -39,7 +39,7 @@ def test_topo():
 
     info("*** Some small test \n")
     info("*** Creating quantum links\n")
-    net.add_quantum_link(h_1, h_2, "10.0.0.3/24")
+    bridge = net.add_quantum_link(h_1, h_2, "10.0.0.3/24", simple=False)
     h_1.setIP("11.0.0.1/24", intf="h1-bridge")
 
     info("*** Starting network\n")
@@ -53,8 +53,9 @@ def test_topo():
     #h_2.cmd("iperf -s -D")
 
     info("*** Testing connections\n")
-    CLI(net)
-
+    #Testing log extraction
+    #bridge.cmd("touch /app/test.csv")
+    #net.extract_data(bridge, "/app/test.csv", "test.csv")
 
 if __name__ == "__main__":
     setLogLevel("info")

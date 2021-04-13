@@ -4,6 +4,8 @@ and adds puts them through custom channels
 """
 import os
 import time
+from datetime import datetime
+from threading import Thread
 
 from netfilterqueue import NetfilterQueue
 from qunetsim.components import Host
@@ -17,6 +19,38 @@ from quantum_bridge.simple_bridge import SimpleChannel
 
 
 LOGFILE = "/app/log.txt"
+
+BRIDGE_START_TIME = datetime.now()
+
+def bw_calc(start_time, end_time, packet_bit_len):
+    """
+    Returns bandwidth in bits/seconds
+    """
+    delta_time = end_time - start_time
+    delta_time = delta_time.seconds + delta_time.microseconds/1E6
+    #Bandwidth b/s
+    bw = packet_bit_len/delta_time
+    return 
+
+
+
+
+
+def log_info(LOGFILE, start_time, end_time, packet, C):
+    packet_bit_len = len(packet)*8
+    bw = bw_calc(start_time, end_time, packet_bit_len)
+    # start_time, end_time, bit_len, bandwidth
+    start_time = start_time - BRIDGE_START_TIME
+    start_time = start_time.seconds()
+    end_time = end_time - BRIDGE_START_TIME
+    end_time = end_time.seconds()
+    G = packet_bit_len
+    line = [str(start_time), str(end_time), str(packet_bit_len), str(bw), str(C), str(G), f"{G/C:.3f}"]
+    line = "|".join(line)
+    print(f"Logging the following line \n{line}")
+
+
+
 
 
 def to_bit_array(pkt):
@@ -48,7 +82,7 @@ with open("/app/hosts.txt", "r") as host_file:
 
 print(hosts)
 
-quantum_protocol = Channel(hosts)
+quantum_protocol = SimpleChannel()
 
 def packet_diff(in_bits:list, out_bits:list):
     """
@@ -68,7 +102,10 @@ def packet_diff(in_bits:list, out_bits:list):
             print("Exception in packet_diff")
             break
 
-
+def packet_processing_thread(pkt):
+    print("TEST")
+    t = Thread(target=packet_processing, args=(pkt, ))
+    t.start()
 
 def packet_processing(pkt):
     """
@@ -81,18 +118,19 @@ def packet_processing(pkt):
 
     with open(LOGFILE, "a") as logfile:
         pkt.drop()
-        start = time.time()
+        start = datetime.now()
         packet = IP(pkt.get_payload())
         packet_bits = to_bit_array(packet)
 
         source_address = packet[IP].src
         print(f"Packet received from {source_address}")
 
-        new_packet_bits = quantum_protocol.transmit_packet(packet_bits, source_address)
+        new_packet_bits, cost = quantum_protocol.transmit_packet(packet_bits, source_address)
 
         new_packet = IP(from_bit_array(new_packet_bits))
         send(new_packet)
-        end = time.time()
+        end = datetime.now()
+        log_info("badnwidt.log", start, end, new_packet_bits, cost)
         logfile.write("PACKET TRANSMITTED_________________\n")
         logfile.write(hexdump(packet, dump=True) + "\n")
         logfile.write(hexdump(new_packet, dump=True) + "\n")
@@ -108,10 +146,10 @@ except OSError:
 
 
 nfqueue = NetfilterQueue()
-nfqueue.bind(1, packet_processing)
+nfqueue.bind(1, packet_processing_thread)
 print("Listening on a netfilter queue 1")
 #print("Started with entanglement generation")
-#t = DaemonThread(quantum_protocol.entanglement_generation)
+#t = DaemonThread(quantu, costm_protocol.entanglement_generation)
 #Create file to signal that bridge has started
 open(LOGFILE, 'a').close()
 

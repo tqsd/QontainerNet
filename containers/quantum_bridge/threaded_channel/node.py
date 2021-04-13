@@ -7,7 +7,7 @@ from qunetsim.objects import Logger
 from .daemon_thread import DaemonThread
 from .quantum_frame import QuantumFrame
 
-Logger.DISABLED = True
+Logger.DISABLED = False
 
 class Node:
     """ Node class
@@ -147,7 +147,12 @@ class Node:
                     print(str(self.entanglement_buffer.qsize()) + " available local pairs")
                 else:
                     print("DATA FRAME RECEIVED -- " + qf.type)
-                    self.packet_out_queue.append(qf.raw_bits)
+                    self.packet_out_queue.append((qf.raw_bits,
+                                                  {"number_of_epr_pairs_consumed":qf.epr_consumed,
+                                                   "number_of_transmissions":qf.number_of_transmissions,
+                                                   "transmission_type":qf.type,
+                                                   "measurment_time":qf.measurement_time
+                                                   }))
                     self.packet_out_queue_event.set()
 
         except Exception as e:
@@ -175,6 +180,7 @@ class Node:
                     self.epr_lock.set()
                     self.epr_trigger.clear()
         except Exception as e:
+            print("Exception in sender protocol")
             print(e)
 
     def add_to_in_queue(self, data):
@@ -184,6 +190,7 @@ class Node:
 
         PUBLIC METHOD
         """
+        print("Adding packet to queue")
         self.packet_in_queue.append(data)
         self.packet_in_queue_event.set()
 

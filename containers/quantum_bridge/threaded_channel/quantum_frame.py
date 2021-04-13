@@ -1,4 +1,5 @@
 import time
+from datetime import timedelta, datetime
 
 from qunetsim.objects import Logger
 from qunetsim.objects import Qubit
@@ -39,9 +40,12 @@ class QuantumFrame:
         self.creation_time = None
         self.deletion_time = None
         self.received_time = None
-        self.measurement_time = None
+        self.measurement_time = timedelta(seconds=0)
         self.await_ack = await_ack
         self.termination_byte = "01111110"
+        self.epr_consumed = 0
+        self.number_of_transmissions = 0
+        self.total_measurement_time = timedelta(seconds=0)
 
     '''
     def _create_header(self):
@@ -62,6 +66,7 @@ class QuantumFrame:
         """
         Send data frame, sequential or superdense ecnoded
         """
+        print("Send data frame")
         self.creation_time = time.time()
         self.raw_bits = data
         data.append(self.termination_byte)
@@ -73,6 +78,7 @@ class QuantumFrame:
             if entanglement_buffer.qsize() > 0:
                 self.type = "DATA_SC"
                 self._send_data_frame_header(destination_node.host)
+                print("Sending data frame superdense")
                 self._send_data_frame_sc(data, destination_node.host)
                 return
             send_sequentially = True
@@ -82,6 +88,7 @@ class QuantumFrame:
         if send_sequentially:
             self.type = "DATA_SEQ"
             self._send_data_frame_header(destination_node.host)
+            print("Sending data frame sequentially")
             self._send_data_frame_seq(data, destination_node.host)
 
 
@@ -96,6 +103,7 @@ class QuantumFrame:
         for byte in data:
             qbyte_ids = []
             for iterat, bit in enumerate(byte):
+                #print(f"sending {bit}")
                 q = Qubit(self.host, q_id=str(q_num)+"-"+timestamp)
                 q_num = q_num + 1
                 if bit == '1':
@@ -103,6 +111,7 @@ class QuantumFrame:
                 self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
                                             no_ack=True)
                 qbyte_ids.append(q.id)
+        print("DONE SENDING")
 
     def _send_data_frame_sc(self, data, destination):
         """
@@ -215,6 +224,7 @@ class QuantumFrame:
         """
         header = ""
         while len(header) < 2:
+            #print("Listening for next header qubit")
             q = self.host.get_data_qubit(source.host_id, wait=-1)
             if q is not None:
                 m = q.measure()
@@ -224,6 +234,7 @@ class QuantumFrame:
                     header = header + '1'
                 else:
                     header = header + '0'
+        print(f"HEADER: {header}")
         if header == '00':
             self._receive_epr(source)
         if header == '01':
@@ -252,19 +263,24 @@ class QuantumFrame:
         buf_qbyte_ids = []
         while buffer.qsize() > 0 and not complete:
             q1 = self.host.get_data_qubit(source.host_id, wait=-1)
-
             rec_qbyte_ids.append(q1.id)
             q2 = buffer.get()
             buf_qbyte_ids.append(q2.id)
             q1.cnot(q2)
             q1.H()
+            pre_measurement_time = datetime.now()
             crumb = ""
             crumb = crumb + str(q1.measure())
             crumb = crumb + str(q2.measure())
+            self.measurement_time = self.measurement_time +(datetime.now()-pre_measurement_time)
+
+            self.epr_consumed = self.epr_consumed + 1
+            self.number_of_transmissions = self.number_of_transmissions + 1
+
             if len(data) == 0:
                 data.append(crumb)
                 continue
-            elif len(data[-1]) < 8:
+            if len(data[-1]) < 8:
                 data[-1] = data[-1] + crumb
             else:
                 data.append(crumb)
@@ -301,12 +317,16 @@ class QuantumFrame:
             data = []
         complete = False
         while not complete:
+            #print("Waiting for next normal qubit")
             q = self.host.get_data_qubit(source.host_id, wait=-1)
+            pre_measurement_time = datetime.now()
             bit = str(q.measure())
+            self.measurement_time = self.measurement_time +(datetime.now()-pre_measurement_time)
+            self.number_of_transmissions = self.number_of_transmissions + 1
             if len(data) == 0:
                 data.append(bit)
                 continue
-            elif len(data[-1]) < 8:
+            if len(data[-1]) < 8:
                 data[-1] = data[-1] + bit
             else:
                 data.append(bit)
