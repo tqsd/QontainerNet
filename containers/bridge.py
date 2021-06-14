@@ -4,6 +4,7 @@ and adds puts them through custom channels
 """
 import os
 import time
+import sys
 
 from netfilterqueue import NetfilterQueue
 from qunetsim.components import Host
@@ -40,15 +41,15 @@ def from_bit_array(bin_list):
     result = bytes([int(x,0) for x in byte_list])
     return result
 
-
 hosts = []
 with open("/app/hosts.txt", "r") as host_file:
     for line in host_file.readlines():
         hosts.append(line.rstrip())
 
-print(hosts)
-
-quantum_protocol = Channel(hosts)
+epr_frame_size = 40
+if len(sys.argv) > 1:
+    epr_frame_size = int(sys.argv[1])
+quantum_protocol = Channel(hosts, epr_frame_size)
 
 def packet_diff(in_bits:list, out_bits:list):
     """
@@ -88,7 +89,13 @@ def packet_processing(pkt):
         source_address = packet[IP].src
         print(f"Packet received from {source_address}")
 
-        new_packet_bits = quantum_protocol.transmit_packet(packet_bits, source_address)
+        raw_bytes_list = list(raw(packet))
+        if len(raw_bytes_list) == 24 and raw_bytes_list[-4] == 25:
+            print("EPR SIGNAL RECEIVED")
+            epr_packet_bits = quantum_protocol.transmit_packet('epr', source_address, "epr")
+            return
+
+        new_packet_bits = quantum_protocol.transmit_packet(packet_bits, source_address, "normal")
 
         new_packet = IP(from_bit_array(new_packet_bits))
         send(new_packet)

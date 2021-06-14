@@ -19,7 +19,7 @@ class Node:
     """
 
     def __init__(self, host: str, network, backend, queue_size=512, is_epr_initiator=False, frame_size=48,
-                 epr_transmission_time=20):
+                 epr_transmission_time=20, epr_manual_mode=False,epr_frame_size=20):
         """
         Inits node
         """
@@ -30,6 +30,7 @@ class Node:
         self.entanglement_buffer = queue.Queue()
         self.queue_size = queue_size
         self.frame_size = frame_size
+        self.epr_frame_size = epr_frame_size
         #Packet management before/after channel transmission
         self.packet_in_queue_event = Event()
         self.packet_out_queue_event = Event()
@@ -46,6 +47,7 @@ class Node:
         self.peer = None
         self.max_queue_size = 8*1000
         self.epr_transmission_time = epr_transmission_time
+        self.epr_manual_mode = epr_manual_mode
 
     def connect(self, node):
         """
@@ -136,7 +138,7 @@ class Node:
             while True:
                 if self.stop_signal.is_set():
                     return
-                qf = QuantumFrame(node=self)
+                qf = QuantumFrame(node=self, mtu=self.epr_frame_size)
                 qf.receive(self.peer.host)
                 if qf.type == 'EPR':
                     for q in qf.extract_local_pairs():
@@ -144,6 +146,14 @@ class Node:
                         self.entanglement_buffer.put(q)
                     #map(self.entanglement_buffer.put, qf.extract_local_pairs())
                     #self.entanglement_buffer.extend(qf.extract_local_pairs())
+                    if self.epr_manual_mode:
+                        self.packet_out_queue.append((qf.raw_qubits,
+                                                        {"number_of_epr_pairs_consumed":qf.epr_consumed,
+                                                        "number_of_transmissions":qf.number_of_transmissions,
+                                                        "transmission_type":qf.type,
+                                                        "measurment_time":"0"
+                                                        }))
+                        self.packet_out_queue_event.set()
                     print(str(self.entanglement_buffer.qsize()) + " available local pairs")
                 else:
                     print("DATA FRAME RECEIVED -- " + qf.type)
@@ -172,10 +182,17 @@ class Node:
                 if self.stop_signal.is_set():
                     return
                 if self.packet_in_queue_event.is_set():
-                    self._transmit_data_frame(self.packet_in_queue.pop(0))
+                    packet = self.packet_in_queue.pop(0)
+                    print("PACKET FLAG IS SET")
+                    print(packet)
+                    if packet == "EPR":
+                        print("MANUAL EPR DATA FRAME TRANSMISSION")
+                        self._transmit_epr_frame()
+                    else:
+                        self._transmit_data_frame(packet)
                     if len(self.packet_in_queue) == 0:
                         self.packet_in_queue_event.clear()
-                elif self.epr_trigger.is_set():
+                elif self.epr_trigger.is_set() and not self.epr_manual_mode:
                     self._transmit_epr_frame()
                     self.epr_lock.set()
                     self.epr_trigger.clear()
@@ -214,7 +231,7 @@ class Node:
 
         PRIVATE METHOD: called by sender_protocol()
         """
-        qf = QuantumFrame(node=self)
+        qf = QuantumFrame(node=self, mtu=self.epr_frame_size)
         qf.send_epr_frame(self.peer)
         for q in qf.extract_local_pairs():
             self.entanglement_buffer.put(q)
@@ -226,6 +243,6 @@ class Node:
 
         PRIVATE METHOD: called by sender_protocol()
         """
-        qf = QuantumFrame(node=self)
+        qf = QuantumFrame(node=self,mtu=self.epr_frame_size)
         qf.send_data_frame(data, self.peer, self.entanglement_buffer)
 

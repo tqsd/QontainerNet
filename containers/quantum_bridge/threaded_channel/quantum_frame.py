@@ -24,7 +24,7 @@ class QuantumFrame:
     """
 
 
-    def __init__(self, node, mtu=80, await_ack=False):
+    def __init__(self, node, mtu=20, await_ack=False):
         """
         Inits quantum frame
         """
@@ -33,6 +33,7 @@ class QuantumFrame:
         self.host = node.host
         self.MTU = mtu
         self.raw_bits = None
+        self.raw_qubits = []
         self.qubit_array = []
         self.local_qubits = []
         # Performance statistics
@@ -346,7 +347,9 @@ class QuantumFrame:
         for x in range(self.MTU):
             for i in range(8):
                 q = self.host.get_data_qubit(source.host_id, wait=-1)
+                self.epr_consumed = self.epr_consumed - 1
                 self.local_qubits.append(q)
+            self.raw_qubits.append('eeeeeeee')
         simple_logger(self.node.host.host_id, "---- EPR RECEIVED")
         for q in self.local_qubits:
             simple_logger(self.node.host.host_id+"-epr", str(q.id))

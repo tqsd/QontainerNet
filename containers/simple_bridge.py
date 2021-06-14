@@ -115,6 +115,10 @@ def packet_processing(pkt):
         proc_line = [x for x in proc_file.readline().split(" ") if x]
         print(f"Packets in queue:  {proc_line[2]}")
         #print(f"Packets processed: {proc_line[7]}")
+        #TEMP
+        packet = IP(pkt.get_payload())
+        pkt.drop()
+        return
 
     with open(LOGFILE, "a") as logfile:
         pkt.drop()
