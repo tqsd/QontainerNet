@@ -6,6 +6,7 @@ import os
 import time
 import sys
 
+import threading
 from netfilterqueue import NetfilterQueue
 from qunetsim.components import Host
 from qunetsim.backends import ProjectQBackend
@@ -107,23 +108,48 @@ def packet_processing(pkt):
         #packet.show()
         #new_packet.show()
 
+def test_pass_1(pkt):
+    print("Packet in queue 1")
+    pkt.accept()
+
+def test_pass_2(pkt):
+    print("Packet in queue 2")
+    pkt.accept()
 
 try:
     os.remove(LOGFILE)
 except OSError:
     pass
 
+def processing_1(pkt):
+    print("Packet received on interface 1")
+    print(pkt)
+    pkt.accept()
 
-nfqueue = NetfilterQueue()
-nfqueue.bind(1, packet_processing)
-print("Listening on a netfilter queue 1")
+def processing_2(pkt):
+    print("Packet received on interace 2")
+    print(pkt)
+    pkt.accept()
+
+nfqueue1 = NetfilterQueue()
+nfqueue2 = NetfilterQueue()
+#nfqueue.bind(1, packet_processing)
+
+t1 = threading.Thread(target=nfqueue1.bind, args=(1,processing_2))
+t2 = threading.Thread(target=nfqueue2.bind, args=(2,processing_1))
+
+t1.start()
+t2.start()
+
+print("Listening on a netfilter queue 1 and 2")
 #print("Started with entanglement generation")
 #t = DaemonThread(quantum_protocol.entanglement_generation)
 #Create file to signal that bridge has started
 open(LOGFILE, 'a').close()
 
 try:
-    nfqueue.run()
+    nfqueue1.run()
+    nfqueue2.run()
 except KeyboardInterrupt:
     print('')
 

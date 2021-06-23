@@ -91,6 +91,7 @@ class Qontainernet(Containernet):
         bridge.cmd(f"ip addr add {link_ip_address} brd + dev bridge")
         bridge.cmd(f"route add default gw {gw} dev bridge")
 
+
         if node_1_ip is not None:
             print("Setting node_1 ip")
             node_1.setIP(node_1_ip, intf=f"{node_1.name}-{bridge.name}")
@@ -102,9 +103,16 @@ class Qontainernet(Containernet):
         # bridge.cmd("nft add filter input counter queue num 1")
         # bridge.cmd("nft add table bridge custom")
         # bridge.cmd("nft add chain bridge custom
-        bridge.cmd("iptables -A FORWARD -i bridge -p all -j NFQUEUE --queue-num 1")
+        #bridge.cmd("iptables -A FORWARD -i bridge -p all -j NFQUEUE --queue-num 1")
+        #bridge.cmd(f"iptables -A FORWARD -i {bridgeName}-{name1} -p all -j NFQUEUE --queue-num 1")
+        #bridge.cmd(f"iptables -A FORWARD -i {bridgeName}-{name2} -p all -j NFQUEUE --queue-num 2")
+        n = 1 
+        print("Adding iptables rules")
+        er = bridge.cmd(f"iptables -I FORWARD -m physdev --physdev-is-bridged --physdev-in {bridgeName}-{name1} -j NFQUEUE --queue-num {n} --queue-bypass")
+        bridge.cmd(f"iptables -I FORWARD -m physdev --physdev-is-bridged --physdev-in {bridgeName}-{name2} -j NFQUEUE --queue-num {n+1} --queue-bypass")
 
-        bridge.cmd("echo 'test2 \n test3' > /app/hosts.txt")
+        print(er)
+        bridge.cmd(f"echo '{bridgeName}-{name1} \n{bridgeName}-{name2}' > /app/hosts.txt")
         self._start(simple, bridge, epr_frame_size=epr_frame_size)
         return bridge
 
@@ -116,7 +124,8 @@ class Qontainernet(Containernet):
         if simple:
             bridge.cmd("tmux new-session -d -s bridge 'python simple_bridge.py' &")
         else:
-            bridge.cmd(f"tmux new-session -d -s bridge 'python bridge.py {epr_frame_size}' &")
+            return 
+            #bridge.cmd(f"tmux new-session -d -s bridge 'python bridge.py {epr_frame_size}' &")
 
         is_up = False
 

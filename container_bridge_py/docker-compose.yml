@@ -1,0 +1,7 @@
+version: "3.7"
+services:
+  qnode2:
+    image: quantum_bridge_c
+    build:
+      context: .
+      dockerfile: Dockerfile.nfqueue-c

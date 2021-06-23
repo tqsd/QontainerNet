@@ -41,7 +41,7 @@ def test_topo(net, epr_frame_size):
 
 
     #info("*** Creating quantum links")
-
+    print("HMMMM")
     bridge1 = net.add_quantum_link(h1, s1,
                                    "11.0.0.10/24",
                                    node_1_ip="11.0.0.2/24",
