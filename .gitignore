@@ -1,3 +1,6 @@
+# TEMPORARY DIRECTORY AND LOG FILES
+tmp/
+*.csv
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

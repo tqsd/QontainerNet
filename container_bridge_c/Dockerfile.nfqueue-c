@@ -1,0 +1,29 @@
+FROM python:3.6-buster
+
+RUN apt-get update && apt-get install -y \
+    bridge-utils \
+    build-essential \
+    fping \
+    iperf \
+    iptables \
+    libnetfilter-queue-dev \
+    net-tools \
+    tmux \
+    tcpdump \
+    vim \
+    zip
+
+
+
+RUN apt-get -y install build-essential
+
+WORKDIR app
+COPY . .
+RUN ls
+RUN gcc bridge.c -o bridge -lnfnetlink -lnetfilter_queue -lpthread -lz -lm -ldl
+RUN ls
+
+
+
+
+

@@ -22,7 +22,9 @@ RUN apt-get -qq -y install \
     vim \
     tmux \
     fping \
-    iperf
+    iperf \
+    iperf3 \
+    mz
 
 RUN pip3 install cython
 RUN pip3 install matplotlib
