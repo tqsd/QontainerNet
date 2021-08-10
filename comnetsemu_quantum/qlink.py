@@ -23,6 +23,49 @@ class Qontainernet(Containernet):
         print("Making a directory")
         os.mkdir(self.log_dir)
 
+    def classical_interface(self, ifce, node=None):
+        """
+        Makes existing interface behave like quantum link.
+        Buffers can only work one way and can not be shared between connected interfaces.
+        """
+
+
+        base_rate = 0.4
+        peak_rate = 2
+        buffer_size = 1024
+
+        print(f"sudo tc qdisc del root {ifce}")
+
+        if node is not None:
+            node.cmd(f"tc qdisc del root dev {ifce}")
+            #node.cmd(f"tc qdisc add dev {ifce} root tbf rate {2*base_rate}mbit latency {latency}ms")
+            node.cmd(f"tc qdisc add dev {ifce} root handle 1: htb default 2")
+            node.cmd(f"tc class add dev {ifce} parent 1:1 classid 1:6 htb rate 0.5mbit ceil 1.5mbit burst 5mbit")
+
+        else:
+            os.system(f"tc qdisc del root dev {ifce}")
+            os.system(f"tc qdisc add dev {ifce} root tbf rate {base_rate}mbit burst {buffer_size}kb latency 10ms")
+
+    def quantum_interface(self, ifce, node=None, base_rate=1, peak_rate=2, buffer_size=10):
+        """
+        Makes existing interface behave like quantum link.
+        Buffers can only work one way and can not be shared between connected interfaces.
+        """
+
+
+        latency = 200
+
+        print(f"sudo tc qdisc del root {ifce}")
+
+        if node is not None:
+            node.cmd(f"tc qdisc del root dev {ifce}")
+            #node.cmd(f"tc qdisc add dev {ifce} root tbf rate {base_rate}mbit burst {buffer_size}kb latency {latency}ms peakrate {peak_rate}mbit mtu 1540")
+            node.cmd(f"tc qdisc add dev {ifce} root handle 1: htb default 6")
+            node.cmd(f"tc class add dev {ifce} parent 1:1 classid 1:6 htb rate {base_rate}mbit ceil {peak_rate}mbit burst {buffer_size}mbit")
+        else:
+            os.system(f"tc qdisc del root dev {ifce}")
+            os.system(f"tc qdisc add dev {ifce} root handle 1: htb default 6")
+            os.system(f"tc class add dev {ifce} parent 1:1 classid 1:6 htb rate {base_rate}mbit ceil {peak_rate}mbit burst {buffer_size}mbit")
 
     def add_quantum_link(self, node_1, node_2,
                          link_ip_address: str,
@@ -30,7 +73,8 @@ class Qontainernet(Containernet):
                          node_2_ip: str=None,
                          bw=100,
                          delay="10ms",
-                         simple=True,
+                         simple=False,
+                         docker_bridge="quantum_bridge",
                          epr_frame_size=20):
         """
         Adds quantum link in the folloving way:
@@ -47,7 +91,7 @@ class Qontainernet(Containernet):
 
         bridge = self.addDockerHost(
             "bridge"+str(self.quantum_bridge_counter),
-            dimage="quantum_bridge:latest",
+            dimage=f"{docker_bridge}:latest",
             ip=link_ip_address,
             docker_args={
                 "hostname": "quantum_bridge",
@@ -85,8 +129,8 @@ class Qontainernet(Containernet):
         bridge.cmd("brctl addbr bridge")
         bridge.cmd(f"brctl addif bridge {bridgeName}-{name1}")
         bridge.cmd(f"brctl addif bridge {bridgeName}-{name2}")
-        print(f"brctl addif bridge {bridgeName}-{name1}")
-        print(f"brctl addif bridge {bridgeName}-{name2}")
+        #print(f"brctl addif bridge {bridgeName}-{name1}")
+        #print(f"brctl addif bridge {bridgeName}-{name2}")
         bridge.cmd("ip link set dev bridge up")
         bridge.cmd(f"ip addr add {link_ip_address} brd + dev bridge")
         bridge.cmd(f"route add default gw {gw} dev bridge")
@@ -106,33 +150,42 @@ class Qontainernet(Containernet):
         #bridge.cmd("iptables -A FORWARD -i bridge -p all -j NFQUEUE --queue-num 1")
         #bridge.cmd(f"iptables -A FORWARD -i {bridgeName}-{name1} -p all -j NFQUEUE --queue-num 1")
         #bridge.cmd(f"iptables -A FORWARD -i {bridgeName}-{name2} -p all -j NFQUEUE --queue-num 2")
-        n = 1 
+        n = 0
         print("Adding iptables rules")
         er = bridge.cmd(f"iptables -I FORWARD -m physdev --physdev-is-bridged --physdev-in {bridgeName}-{name1} -j NFQUEUE --queue-num {n} --queue-bypass")
         bridge.cmd(f"iptables -I FORWARD -m physdev --physdev-is-bridged --physdev-in {bridgeName}-{name2} -j NFQUEUE --queue-num {n+1} --queue-bypass")
 
-        print(er)
-        bridge.cmd(f"echo '{bridgeName}-{name1} \n{bridgeName}-{name2}' > /app/hosts.txt")
-        self._start(simple, bridge, epr_frame_size=epr_frame_size)
+        bridge.cmd(f"echo '{node_1_ip}\n{node_2_ip}' > /app/hosts.txt")
+        self._start(docker_bridge ,bridge , epr_frame_size=epr_frame_size, simple=simple)
         return bridge
 
-    def _start(self, simple, bridge, epr_frame_size=20):
+    def _start(self, docker_bridge, bridge, epr_frame_size=100, epr_buffer_size=1000, sleep_time=5, single_transmission_delay=1, simple=False):
         """
         Initiate bridge.py and wait until it's up and running
         PRIVATE METHOD
         """
-        if simple:
+        if docker_bridge is "quantum_bridge_c":
+            print("HERE")
+            #print(f"epr_frame_size={epr_frame_size}")
+            #print(f"epr_buffer_size={epr_buffer_size}")
+            bridge.cmd(f"tmux new-session -d -s bridge './bridge {epr_frame_size} {epr_buffer_size} {sleep_time} {single_transmission_delay}' &")
+            #print("Something")
+        elif simple:
             bridge.cmd("tmux new-session -d -s bridge 'python simple_bridge.py' &")
+            print("RUNNING")
         else:
-            return 
-            #bridge.cmd(f"tmux new-session -d -s bridge 'python bridge.py {epr_frame_size}' &")
+            bridge.cmd(f"tmux new-session -d -s bridge 'python bridge.py {epr_frame_size}' &")
 
         is_up = False
 
         info("\n*** Waiting for quantum bridge to initiate\n")
-        while not is_up:
+        if docker_bridge is "quantum_bridge_c":
+            is_up = True
+        print
+        while not is_up :
             if "log.txt" in bridge.cmd("ls /app/"):
                 is_up = True
+        info("*** Bridge initiated\n")
 
     def wait_for_number_of_packets_transmitted(self, bridge, target_count):
         """
@@ -165,4 +218,3 @@ class Qontainernet(Containernet):
 
         pathlib.Path("/".join(dest_dirs)).mkdir(parents=True, exist_ok=True)
         shutil.copyfile(q_link_file, dest)
-

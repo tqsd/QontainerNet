@@ -38,9 +38,12 @@ def test_topo(rounds, epr_num, packet_num, epr_frame_size,net):
 
     info("*** Some small test \n")
     info("*** Creating quantum links\n")
-    bridge = net.add_quantum_link(h_1, h_2, "10.0.0.3/24", simple=False,
+    bridge = net.add_quantum_link(h_1, h_2, "10.0.0.3/24",
+                                  node_1_ip="11.0.0.1",
+                                  node_2_ip="11.0.0.2",
+                                  simple=False,
                                   epr_frame_size=epr_frame_size)
-    h_1.setIP("11.0.0.1/24", intf="h1-bridge")
+    #h_1.setIP("11.0.0.1/24", intf="h1-bridge")
 
     info("*** Starting network\n")
     net.start()
@@ -52,13 +55,13 @@ def test_topo(rounds, epr_num, packet_num, epr_frame_size,net):
 
     info("*** Starting simulation\n")
     h_1.cmd(f"tmux new-session -d -s h1 'python traffic_generation.py 11.0.0.2 {rounds} {epr_num} {packet_num}'")
-    print(h_1.cmd("tmux ls"))
+    #print(h_1.cmd("tmux ls"))
     #print(h_1.cmd("tmux ls"))
     info("*** Waiting for enough packets to be transmitted\n")
     net.wait_for_number_of_packets_transmitted(bridge, 100)# rounds*(packets_per_epr+1))
     info("*** Enough packets recorded\n")
-    #info("*** Starting debug console")
-    #CLI(net)
+    info("*** Starting debug console")
+    CLI(net)
     #Testing log extraction
     net.extract_data(bridge, "/app/packet_logs.log", f"simulation_results/packet_log_{epr_frame_size}B-{rounds}-{epr_num}-{packet_num}.csv")
     #net.extract_data(bridge, "/app/packet_logs.log", f"simulation_results/'EPR-B:{epr_frame_size} P/EPR:{packet_num}/{epr_num}.csv'")
