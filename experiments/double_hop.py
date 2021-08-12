@@ -12,7 +12,7 @@ from mininet.link import TCLink
 from mininet.log import info, setLogLevel
 from mininet.node import Controller
 
-from comnetsemu_quantum.qlink import Qontainernet
+from qontainernet import Qontainernet
 
 
 def test_topo(net, epr_frame_size):

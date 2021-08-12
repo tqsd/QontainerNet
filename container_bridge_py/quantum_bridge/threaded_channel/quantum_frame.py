@@ -89,7 +89,7 @@ class QuantumFrame:
         if send_sequentially:
             self.type = "DATA_SEQ"
             self._send_data_frame_header(destination_node.host)
-            print("Sending data frame sequentially")
+            print("Sending data frame without entanglement enhancment")
             self._send_data_frame_seq(data, destination_node.host)
 
 

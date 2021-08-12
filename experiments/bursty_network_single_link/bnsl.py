@@ -12,7 +12,7 @@ from mininet.link import TCLink
 from mininet.log import info, setLogLevel
 from mininet.node import Controller
 
-from comnetsemu_quantum.qlink import Qontainernet
+from qontainernet import Qontainernet
 
 
 
@@ -36,8 +36,7 @@ def test_topo(rounds, epr_num, packet_num, epr_frame_size,net):
         docker_args={"hostname": "h2"},
     )
 
-    info("*** Some small test \n")
-    info("*** Creating quantum links\n")
+    info("*** Creating quantum link\n")
     bridge = net.add_quantum_link(h_1, h_2, "10.0.0.3/24",
                                   node_1_ip="11.0.0.1",
                                   node_2_ip="11.0.0.2",
@@ -47,7 +46,6 @@ def test_topo(rounds, epr_num, packet_num, epr_frame_size,net):
 
     info("*** Starting network\n")
     net.start()
-    info("*** Setting the bridge\n")
 
     info("*** Setting host tmux and running server daemon on both hosts\n")
     h_1.cmd("tmux new-session -d -s h 'tcpdump -i h_1-bridge icmp'")
@@ -55,13 +53,11 @@ def test_topo(rounds, epr_num, packet_num, epr_frame_size,net):
 
     info("*** Starting simulation\n")
     h_1.cmd(f"tmux new-session -d -s h1 'python traffic_generation.py 11.0.0.2 {rounds} {epr_num} {packet_num}'")
-    #print(h_1.cmd("tmux ls"))
-    #print(h_1.cmd("tmux ls"))
     info("*** Waiting for enough packets to be transmitted\n")
+    #info("*** Starting debug console")
+    #CLI(net)
     net.wait_for_number_of_packets_transmitted(bridge, 100)# rounds*(packets_per_epr+1))
     info("*** Enough packets recorded\n")
-    info("*** Starting debug console")
-    CLI(net)
     #Testing log extraction
     net.extract_data(bridge, "/app/packet_logs.log", f"simulation_results/packet_log_{epr_frame_size}B-{rounds}-{epr_num}-{packet_num}.csv")
     #net.extract_data(bridge, "/app/packet_logs.log", f"simulation_results/'EPR-B:{epr_frame_size} P/EPR:{packet_num}/{epr_num}.csv'")
@@ -117,6 +113,7 @@ if __name__ == "__main__":
         net = Qontainernet(controller=Controller, link=TCLink)
         try:
             rounds =  setting["rounds"]
+            rounds = -1
             epr_num = setting["epr_per_round"]
             packet_num = setting["packets_per_round"]
             epr_frame_size = setting["epr_frame_size"]
