@@ -1,5 +1,5 @@
 # QontainerNet
-___
+
 QontainerNet is a ComNetsEmu extension that enables the simulation of quantum enhanced communication links. Currently the project contains three types of quantum enhanced links.
 
 1. Fully Quantum Mechanically Simulated GEWI Link
