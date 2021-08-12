@@ -1,6 +1,6 @@
 # QontainerNet
 ___
-QontainerNet is a ComNetsEmu extension, that enables the simulation to use quantum enhanced communication links. Currently the project contains three types of quantum enhanced links, based on Generate Entanglement When Idle -- GEWI protocol.
+QontainerNet is a ComNetsEmu extension that enables the simulation of quantum enhanced communication links. Currently the project contains three types of quantum enhanced links, based on Generate Entanglement When Idle (GEWI) protocol [1].
 
 1. Fully Quantum Mechanically Simulated GEWI Link
     Full quantum simulation is ran inside of docker container with QuNetSim.
@@ -9,8 +9,8 @@ QontainerNet is a ComNetsEmu extension, that enables the simulation to use quant
 3. Interface based GEWI link
     The behaviour of GEWI protocol is modeled with Token Bucket Filter.
 
-## Instalation
-This project should be run inside of a ComNetsEmu vitual machine.
+## Installation
+This project should be ran inside of a ComNetsEmu vitual machine.
 In order to install ComNetsEmu, please refer to [ComNetsEmu README](https://git.comnets.net/public-repo/comnetsemu).
 
 After logging into the ComNetsEmu VM make sure that `git` and `docker-compose` is installed.
@@ -28,3 +28,5 @@ Run an example with :
  sudo python3 example.py
  `
 
+
+[1] Nötzel, Janis, and Stephen DiAdamo. "Entanglement-assisted data transmission as an enabling technology: A link-layer perspective." 2020 IEEE International Symposium on Information Theory (ISIT). IEEE, 2020.
