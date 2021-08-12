@@ -20,7 +20,7 @@ To clone the project, run:
 git clone git@github.com:tqsd/QontainerNet.git
 `
 
-Prior to running an example, Docker containers need to be built. To run Qontainernet you need to build at least two containers. To build them run the `setup.sh` script.
+Prior to running an example, Docker containers need to be built. To run QontainerNet you need to build at least two containers. To build them run the `setup.sh` script.
 
 ## Usage
 Run an example with :
