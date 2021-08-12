@@ -23,14 +23,19 @@ def generate_epr_packet():
     return packet
 
 def generate_traffic():
-    for r in range(ROUNDS):
-        for i in range(EPR_NUM):
-            packet = generate_epr_packet()
-            send(packet)
-        for i in range(PACKET_NUM):
-            packet = generate_packet(0)
-            send(packet)
+    if ROUNDS == -1:
+        while True:
+            generate_round()
+    else:
+        for r in range(ROUNDS):
+            generate_round()
 
-
+def generate_round():
+    for i in range(EPR_NUM):
+        packet = generate_epr_packet()
+        send(packet)
+    for i in range(PACKET_NUM):
+        packet = generate_packet(0)
+        send(packet)
 if __name__=="__main__":
     generate_traffic()

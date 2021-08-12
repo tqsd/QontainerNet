@@ -20,7 +20,6 @@ class Qontainernet(Containernet):
             shutil.rmtree(self.log_dir)
         except OSError as e:
             print("Error: %s - %s." % (e.filename, e.strerror))
-        print("Making a directory")
         os.mkdir(self.log_dir)
 
     def classical_interface(self, ifce, node=None):
@@ -34,7 +33,6 @@ class Qontainernet(Containernet):
         peak_rate = 2
         buffer_size = 1024
 
-        print(f"sudo tc qdisc del root {ifce}")
 
         if node is not None:
             node.cmd(f"tc qdisc del root dev {ifce}")
@@ -55,7 +53,6 @@ class Qontainernet(Containernet):
 
         latency = 200
 
-        print(f"sudo tc qdisc del root {ifce}")
 
         if node is not None:
             node.cmd(f"tc qdisc del root dev {ifce}")
@@ -110,7 +107,6 @@ class Qontainernet(Containernet):
                      intfName1=f"{name2}-{bridgeName}",
                      intfName2=f"{bridgeName}-{name2}")
 
-        print("Links Created")
 
         # SETTING KERNEL SETTINGS
         #h1.cmd("sysctl -w  net.ipv4.conf.all.rp_filter=0")
@@ -129,19 +125,15 @@ class Qontainernet(Containernet):
         bridge.cmd("brctl addbr bridge")
         bridge.cmd(f"brctl addif bridge {bridgeName}-{name1}")
         bridge.cmd(f"brctl addif bridge {bridgeName}-{name2}")
-        #print(f"brctl addif bridge {bridgeName}-{name1}")
-        #print(f"brctl addif bridge {bridgeName}-{name2}")
         bridge.cmd("ip link set dev bridge up")
         bridge.cmd(f"ip addr add {link_ip_address} brd + dev bridge")
         bridge.cmd(f"route add default gw {gw} dev bridge")
 
 
         if node_1_ip is not None:
-            print("Setting node_1 ip")
             node_1.setIP(node_1_ip, intf=f"{node_1.name}-{bridge.name}")
 
         if node_2_ip is not None:
-            print("Setting node_2 ip")
             node_2.setIP(node_2_ip, intf=f"{node_2.name}-{bridge.name}")
 
         # bridge.cmd("nft add filter input counter queue num 1")
@@ -151,7 +143,6 @@ class Qontainernet(Containernet):
         #bridge.cmd(f"iptables -A FORWARD -i {bridgeName}-{name1} -p all -j NFQUEUE --queue-num 1")
         #bridge.cmd(f"iptables -A FORWARD -i {bridgeName}-{name2} -p all -j NFQUEUE --queue-num 2")
         n = 0
-        print("Adding iptables rules")
         er = bridge.cmd(f"iptables -I FORWARD -m physdev --physdev-is-bridged --physdev-in {bridgeName}-{name1} -j NFQUEUE --queue-num {n} --queue-bypass")
         bridge.cmd(f"iptables -I FORWARD -m physdev --physdev-is-bridged --physdev-in {bridgeName}-{name2} -j NFQUEUE --queue-num {n+1} --queue-bypass")
 
@@ -165,14 +156,9 @@ class Qontainernet(Containernet):
         PRIVATE METHOD
         """
         if docker_bridge is "quantum_bridge_c":
-            print("HERE")
-            #print(f"epr_frame_size={epr_frame_size}")
-            #print(f"epr_buffer_size={epr_buffer_size}")
             bridge.cmd(f"tmux new-session -d -s bridge './bridge {epr_frame_size} {epr_buffer_size} {sleep_time} {single_transmission_delay}' &")
-            #print("Something")
         elif simple:
             bridge.cmd("tmux new-session -d -s bridge 'python simple_bridge.py' &")
-            print("RUNNING")
         else:
             bridge.cmd(f"tmux new-session -d -s bridge 'python bridge.py {epr_frame_size}' &")
 
@@ -181,7 +167,6 @@ class Qontainernet(Containernet):
         info("\n*** Waiting for quantum bridge to initiate\n")
         if docker_bridge is "quantum_bridge_c":
             is_up = True
-        print
         while not is_up :
             if "log.txt" in bridge.cmd("ls /app/"):
                 is_up = True

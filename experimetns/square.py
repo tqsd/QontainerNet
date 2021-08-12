@@ -14,7 +14,7 @@ from mininet.log import info, setLogLevel
 from mininet.node import Controller, OVSSwitch
 
 
-from comnetsemu_quantum.qlink import Qontainernet
+from qontainernet import Qontainernet
 
 
 def test_topo(net, epr_frame_size):
