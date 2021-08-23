@@ -23,7 +23,7 @@ from qontainernet import Qontainernet
 
 
 def test_topo(net,
-              packet_generation_probability= 0.2,
+              packet_generation_probability= 0.4,
               epr_buffer_size = 0.1,
               epr_generation_rate=0.1,
               sleep_time = 10000000,
@@ -109,14 +109,15 @@ def test_topo(net,
                                          classical_buffer_size = classical_buffer_size
                                          )
 
+    print("Starting network")
+    net.start()
+
     ## TO SMOOTHEN THE TRAFFIC
     net.quantum_interface("ch1-cs1", h1,base_rate=ea_rate, peak_rate=ea_rate,
                           e_buffer_size=0,
                           c_buffer_size=ea_rate)
 
 
-    print("Starting network")
-    net.start()
 
 
     traffic_generation_command = f"python lt_traffic_generation.py 11.0.0.2 {packet_size} {packet_generation_probability} {int(ea_rate*1000*1000)}"
@@ -217,10 +218,12 @@ def continued_simulation(
                          ):
 
     #Kill previous docker containers and setup
-    try:
-        os.system("docker kill $(docker ps -q)")
-    except:
-        pass
+    containers = ["ch1","ch2","bridge0"]
+    for c in containers:
+        try:
+            os.system(f"docker kill $(docker ps -a -q --filter=name='{c}')")
+        except:
+            pass
     simulated_probabilities = []
     file_name = f"c_link_P={packet_size}_E={epr_buffer_size}_B={classical_buffer_size}_REA={ea_rate}_RNEA={nea_rate}_T={test_length}.csv"
     path = "temp"
@@ -303,19 +306,19 @@ if __name__ == "__main__":
                             ea_rate=0.4,
                             nea_rate=0.2,
                             packet_size = 750,
-                            classical_buffer_size = 1,
-                            test_length=100,
+                            classical_buffer_size = 2,
+                            test_length=60,
                             rounds = 2
                          )
 
-    continued_simulation(   epr_buffer_size = 1,
+    continued_simulation(   epr_buffer_size = 10,
                             epr_generation_rate=0.2,
                             sleep_time = 800000,#0.0000001*10**9,
                             ea_rate=0.4,
                             nea_rate=0.2,
                             packet_size = 750,
-                            classical_buffer_size = 5,
-                            test_length=100,
+                            classical_buffer_size = 1,
+                            test_length=60,
                             rounds = 2
                          )
 

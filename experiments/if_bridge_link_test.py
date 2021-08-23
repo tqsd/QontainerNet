@@ -180,6 +180,11 @@ def test_topo(net,
     return (packet_generation_probability, throughput, rejection_rate,
           average_transmission_rate, average_active_transmission_rate)
 
+
+
+
+
+
 def continued_simulation(
                             epr_buffer_size = 0,
                             ea_rate=0.2,
