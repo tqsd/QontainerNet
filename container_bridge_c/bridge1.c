@@ -1,4 +1,3 @@
-#include <sys/time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -17,17 +16,16 @@ int epr_buffer = 0; // IN QUBYTES
 
 
 //Should be collected from command line arguments
-int epr_frame_size = 10000; // IN QUBYTES
-int epr_buffer_size = 250000; // IN QUBYTES
-int sleep_time = 500000000; // IN NANOSECONDS
-int single_transmission_delay = 1000; //IN NANOSECONDS 1000->1mbit/s
+int epr_frame_size = 10; // IN QUBYTES
+int epr_buffer_size = 100; // IN QUBYTES
+int sleep_time = 2; // IN SECONDS
+int single_transmission_delay = 1; //IN MILISECONDS
 bool allow_epr = true;
-int buffer_size = 2500; //IN PACKETS
 
 
 pthread_t tid[2];
 
-/* msleep(): Sleep for the requested number of miliseconds. */
+/* msleep(): Sleep for the requested number of milliseconds. */
 int msleep(long msec)
 {
   struct timespec ts;
@@ -39,12 +37,7 @@ int msleep(long msec)
       return -1;
     }
 
-  int sec = 0;
-  if (msec >= 1000000000){
-    sec = (int)(msec/1000000000);
-    msec = msec % 1000000000;
-  }
-  ts.tv_sec =  sec; //msec / 1000;
+  ts.tv_sec =  0; //msec / 1000;
   ts.tv_nsec = msec; //(msec % 1000) * 1000000;
 
   do {
@@ -56,28 +49,24 @@ int msleep(long msec)
 
 u_int32_t transmission_delay(int length){
   int delay;
-
-  printf("Packet length %d\n", length);
-  printf("Avaliable EPRs in buffer %d\n", epr_buffer);
-  if(length<2*epr_buffer){
-    printf("LENGTH < EPR_BUFFER\n");
+  if(length<epr_buffer){
+    printf("LENGTH < EPR_BUFFER");
     delay = length * 4;
-    epr_buffer -= length/2;
+    epr_buffer -= length;
   }else if(epr_buffer == 0){
-    printf("EPR BUFFER == 0\n");
+    printf("EPR BUFFER == 0");
     delay = length * 8;
   }else{
-    printf("LENGTH > EPR_BUFFER\n");
-    delay = epr_buffer * 4 + (length-2*epr_buffer)*8;
+    printf("LENGTH > EPR_BUFFER");
+    delay = epr_buffer * 4 + (length-epr_buffer)*8;
     epr_buffer = 0;
   }
   delay = delay * single_transmission_delay;
   printf("The packet should be delayed for %d ms\n", delay);
+  printf("Avaliable EPRs in buffer %d\n", epr_buffer);
 
   return delay; // Returns delay in miliseconds
 }
-
-struct timespec start, end, med;
 
 static u_int32_t print_pkt (struct nfq_data *tb)
 {
@@ -88,52 +77,35 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 	int ret;
 	char *data;
 
-  clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-
-
-
 	ph = nfq_get_msg_packet_hdr(tb);
-
 	if (ph) {
 		id = ntohl(ph->packet_id);
-    printf("Protocol in header %d\n", ph->hw_protocol);
-		//printf("hw_protocol=0x%04x hook=%u id=%u ",
-		//	ntohs(ph->hw_protocol), ph->hook, id);
+		printf("hw_protocol=0x%04x hook=%u id=%u ",
+			ntohs(ph->hw_protocol), ph->hook, id);
 	}
 
 	hwph = nfq_get_packet_hw(tb);
-  int header_size = 0;
 	if (hwph) {
 		int i, hlen = ntohs(hwph->hw_addrlen);
 
-    printf("hlen = %d", hlen);
-    header_size = 2*hlen + 2;
-
-		//printf("hw_src_addr=");
-		//for (i = 0; i < hlen-1; i++)
-			//printf("%02x:", hwph->hw_addr[i]);
-		//printf("%02x ", hwph->hw_addr[hlen-1]);
+		printf("hw_src_addr=");
+		for (i = 0; i < hlen-1; i++)
+			printf("%02x:", hwph->hw_addr[i]);
+		printf("%02x ", hwph->hw_addr[hlen-1]);
 	}
 
 
 	ret = nfq_get_payload(tb, &data);
-   //printf("LENGTH=%d \n", ret);
+  printf("LENGTH=%d \n", ret);
 
-  printf("payload=%d \n",ret);
   int delay;
+  delay = transmission_delay(ret);
 
-  delay = transmission_delay(header_size+ret);
-
-  //printf("Delaying");
+  printf("Delaying");
   //Should prevent from EPR Formaiton
-  clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-
-  uint64_t delta_ns = (end.tv_sec - start.tv_sec) * 1000000000 + (end.tv_nsec - start.tv_nsec);
-
-
-  //delay = delay-delta_ns;
   msleep(delay);
-	//fputc('\n', stdout);
+
+	fputc('\n', stdout);
 
 	return id;
 }
@@ -142,15 +114,12 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *nfa, void *data)
 {
-  static int64_t biggest_delay = 0;
-  static int delay_ticker = 0;
 	u_int32_t id = print_pkt(nfa);
 	//u_int32_t id;
   struct nfqnl_msg_packet_hdr *ph;
 	ph = nfq_get_msg_packet_hdr(nfa);	
 	id = ntohl(ph->packet_id);
-	//printf("entering callback\n");
-
+	printf("entering callback\n");
 	return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
 }
 
@@ -163,7 +132,7 @@ void *packetProcessingThread()
 	int rv;
 	char buf[4096] __attribute__ ((aligned));
 
-	//printf("opening library handle\n");
+	printf("opening library handle\n");
 	h = nfq_open();
 	if (!h) {
 		fprintf(stderr, "error during nfq_open()\n");
@@ -189,12 +158,6 @@ void *packetProcessingThread()
 		exit(1);
 	}
 
-  printf("Setting queue length!\n");
-  if(nfq_set_queue_maxlen(qh, buffer_size)<0){
-		fprintf(stderr, "error during nfq_set_queue_maxlen()\n");
-		exit(1);
-  }
-
 	printf("setting copy_packet mode\n");
 	if (nfq_set_mode(qh, NFQNL_COPY_PACKET, 0xffff) < 0) {
 		fprintf(stderr, "can't set packet_copy mode\n");
@@ -210,7 +173,7 @@ void *packetProcessingThread()
 	while ((rv = recv(fd, buf, sizeof(buf), 0)))
 	{
     allow_epr = false;
-		//printf("pkt received\n");
+		printf("pkt received\n");
 		nfq_handle_packet(h, buf, rv);
     allow_epr = true;
 	}
@@ -230,20 +193,20 @@ void *packetProcessingThread()
 }
 
 void *eprGenThread(){
-  //printf("Generating EPR\n");
+  printf("Generating EPR\n");
   while(1){
-    msleep(sleep_time);
+    sleep(sleep_time);
 
     if(!allow_epr){
-      //printf("EPR Generation BLOCKED!");
+      printf("EPR Generation BLOCKED!");
       continue;
     }
     epr_buffer = epr_buffer + epr_frame_size;
     if(epr_buffer > epr_buffer_size){
       epr_buffer = epr_buffer_size;
     }
-    printf("\nEPR BUFFER: %d/%d <- %d w %d\n", epr_buffer, epr_buffer_size, epr_frame_size, sleep_time);
-    //fprintf(stdout, "%lu\n", (unsigned long)time(NULL)); 
+    printf("\nEPR BUFFER: %d/%d\n", epr_buffer, epr_buffer_size);
+    fprintf(stdout, "%lu\n", (unsigned long)time(NULL)); 
   }
 }
 
@@ -252,19 +215,18 @@ int main(int argc, char **argv)
   for (int i = 0; i < argc; i++) {
     printf("%s\n", argv[i]);
   }
-  if(argc > 5){
+  if(argc > 4){
     epr_frame_size = (int) strtol(argv[1], NULL, 10);
     epr_buffer_size = (int) strtol(argv[2], NULL, 10);
     sleep_time = (int) strtol(argv[3], NULL, 10);
     single_transmission_delay = (int) strtol(argv[4], NULL, 10);
-    buffer_size = (int) strtol(argv[5], NULL, 10);
+    single_transmission_delay = (int) strtol(argv[5], NULL, 10);
   }
   printf("BRIDGE PARAMETERS ARE:\n");
   printf("epr_frame_size: %d\n", epr_frame_size);
   printf("epr_buffer_size: %d\n", epr_buffer_size);
   printf("sleep_time: %d\n", sleep_time);
   printf("single_transmission_delay: %d\n", single_transmission_delay);
-  printf("classical_buffer_size: %d\n", buffer_size);
 
 
   printf("Starting Packet Processing Thread\n");

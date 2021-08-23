@@ -1,11 +1,14 @@
 from comnetsemu.net import Containernet
 from mininet.log import info
 import os
+import subprocess
 import shutil
 import pathlib
 import time
 import datetime
 
+class NetworkNotStartedException(Exception):
+    pass
 
 class Qontainernet(Containernet):
     """
@@ -15,12 +18,17 @@ class Qontainernet(Containernet):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.quantum_bridge_counter = 0
+        self.started = False
         self.log_dir = "./tmp"
         try:
             shutil.rmtree(self.log_dir)
         except OSError as e:
             print("Error: %s - %s." % (e.filename, e.strerror))
         os.mkdir(self.log_dir)
+
+    def start(self, *args, **kwargs):
+        super().start(*args, *kwargs)
+        self.started = True
 
     def classical_interface(self, ifce, node=None):
         """
@@ -44,16 +52,46 @@ class Qontainernet(Containernet):
             os.system(f"tc qdisc del root dev {ifce}")
             os.system(f"tc qdisc add dev {ifce} root tbf rate {base_rate}mbit burst {buffer_size}kb latency 10ms")
 
-    def quantum_interface(self, ifce, node=None, base_rate=1, peak_rate=2, buffer_size=10):
+    def quantum_interface(self, ifce, node=None, base_rate=1, peak_rate=2,
+                          e_buffer_size=10, c_buffer_size = 1):
         """
         Makes existing interface behave like quantum link.
         Buffers can only work one way and can not be shared between connected interfaces.
         """
+        if not self.started:
+            raise NetworkNotStartedException("Network must be started before configuring this interface")
 
 
-        latency = 200
+        c_buffer_size = int((c_buffer_size*1000*1000)/8)
+        print("Creating quantum interface")
+        print(f"Base rate = {base_rate}")
+        print(f"Peak rate = {peak_rate}")
+        print(f"e_buffer_size = {e_buffer_size}")
+        print(f"c_buffer_size = {c_buffer_size}")
 
 
+
+        commands = [
+            f"tc qdisc del root dev {ifce}", #REMOVE EXISTING TRAFFIC CONTROL RULES
+            f"tc qdisc add dev {ifce} root handle 1: htb default 1",
+            f"tc class add dev {ifce} parent 1:0 classid 1:1 htb rate {base_rate}mbit ceil {peak_rate}mbit burst {e_buffer_size}mbit",
+            f"tc qdisc add dev {ifce} parent 1:1 handle 2:1 bfifo limit {c_buffer_size}",
+            f"tc filter add dev {ifce} parent 1: matchall classid 2:1"
+        ]
+
+
+        if node is not None:
+            for cmd in commands:
+                node.cmd(cmd)
+        else:
+            for cmd in commands:
+                cmd = "sudo " + cmd
+                result = subprocess.run(cmd.split(" "), stdout=subprocess.PIPE)
+                #print(result.stdout)
+                #ret = os.system(cmd)
+                #print(ret)
+
+        """
         if node is not None:
             node.cmd(f"tc qdisc del root dev {ifce}")
             #node.cmd(f"tc qdisc add dev {ifce} root tbf rate {base_rate}mbit burst {buffer_size}kb latency {latency}ms peakrate {peak_rate}mbit mtu 1540")
@@ -62,7 +100,66 @@ class Qontainernet(Containernet):
         else:
             os.system(f"tc qdisc del root dev {ifce}")
             os.system(f"tc qdisc add dev {ifce} root handle 1: htb default 6")
-            os.system(f"tc class add dev {ifce} parent 1:1 classid 1:6 htb rate {base_rate}mbit ceil {peak_rate}mbit burst {buffer_size}mbit")
+            os.system(f"tc class add dev {ifce} parent 1: classid 1:1 htb rate {base_rate}mbit ceil {peak_rate}mbit burst {buffer_size}mbit")
+            os.system(f"tc qdisc add dev {ifce} parent 1:1 handle 1:6 bfifo limit 1mbit")
+        """
+
+
+
+    def efficient_quantum_link(self, node_1, node_2, link_ip_address:str,
+                               epr_frame_size = 10000, # qubytes
+                               epr_buffer_size = 250000, #qubytes
+                               sleep_time = 500000000, #in nano seconds
+                               single_transmission_duration = 1000, # In nanoseconds 1000ns -> 1mbit/s
+                               classical_buffer_size = 2500 # In packets
+                               ):
+
+        print(f"EPR FRAME SIZE = {epr_frame_size}")
+        print(f"EPR BUFFER SIZE= {epr_buffer_size}")
+        print(f"sleep time = {sleep_time}")
+        print(f"classical Buffer size= {classical_buffer_size}")
+
+        bridge = self.addDockerHost(
+            "bridge"+str(self.quantum_bridge_counter),
+            dimage=f"quantum_bridge_c:latest",
+            ip=link_ip_address,
+            docker_args={
+                "hostname": "quantum_bridge",
+            },
+        )
+
+        bridgeName = bridge.name
+        name1 = node_1.name
+        name2 = node_2.name
+
+        gw = link_ip_address.split('/')[0].split('.')
+        gw[-1]='1'
+        gw = '.'.join(gw)
+
+        self.addLink(node_1, bridge, bw=10, delay="0ms",
+                     intfName1=f"{name1}-{bridgeName}",
+                     intfName2=f"{bridgeName}-{name1}")
+        self.addLink(node_2, bridge, bw=10, delay="0ms",
+                     intfName1=f"{name2}-{bridgeName}",
+                     intfName2=f"{bridgeName}-{name2}")
+
+        bridge.cmd(f"ip addr flush dev {bridgeName}-{name1}")
+        bridge.cmd(f"ip addr flush dev {bridgeName}-{name2}")
+        bridge.cmd("brctl addbr bridge")
+        bridge.cmd(f"brctl addif bridge {bridgeName}-{name1}")
+        bridge.cmd(f"brctl addif bridge {bridgeName}-{name2}")
+        bridge.cmd("ip link set dev bridge up")
+        bridge.cmd(f"ip addr add {link_ip_address} brd + dev bridge")
+        bridge.cmd(f"route add default gw {gw} dev bridge")
+
+
+        bridge.cmd(f"iptables -I FORWARD -m physdev --physdev-is-bridged --physdev-in {bridgeName}-{name1} -j NFQUEUE --queue-num 0 --queue-bypass")
+    
+
+        #Start the bridge
+
+        print(f"tmux new-session -d -s bridge './bridge {epr_frame_size} {epr_buffer_size} {sleep_time} {single_transmission_duration} {classical_buffer_size}' &")
+        bridge.cmd(f"tmux new-session -d -s bridge './bridge {epr_frame_size} {epr_buffer_size} {sleep_time} {single_transmission_duration} {classical_buffer_size}' &")
 
     def add_quantum_link(self, node_1, node_2,
                          link_ip_address: str,
@@ -72,7 +169,8 @@ class Qontainernet(Containernet):
                          delay="10ms",
                          simple=False,
                          docker_bridge="quantum_bridge",
-                         epr_frame_size=20):
+                         epr_frame_size=20,
+                         ):
         """
         Adds quantum link in the folloving way:
         if node_2_ip == NONE -> switch
