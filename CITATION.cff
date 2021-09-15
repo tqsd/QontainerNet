@@ -1,11 +1,11 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 authors:
-  - family-names: Sekavcnik
+  - family-names: Sekavčnik
     given-names: Simon
   - family-names: DiAdamo
     given-names: Stephen
-  - family-names: Noetzel
+  - family-names: Nötzel
     given-names: Janis
   - family-names: Bassoli
     given-names: Richardo
