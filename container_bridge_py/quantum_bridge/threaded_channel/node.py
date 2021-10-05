@@ -139,7 +139,9 @@ class Node:
                 if self.stop_signal.is_set():
                     return
                 qf = QuantumFrame(node=self, mtu=self.epr_frame_size)
+                print("WAITING TO RECEIVE")
                 qf.receive(self.peer.host)
+                print(f"NUMBER OF TRANSMISSIONS {qf.number_of_transmissions}")
                 if qf.type == 'EPR':
                     for q in qf.extract_local_pairs():
                         #print(q.id)
@@ -163,6 +165,8 @@ class Node:
                                                    "transmission_type":qf.type,
                                                    "measurment_time":qf.measurement_time
                                                    }))
+                    print(qf.epr_consumed)
+                    print(qf.number_of_transmissions)
                     self.packet_out_queue_event.set()
 
         except Exception as e:

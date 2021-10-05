@@ -170,6 +170,7 @@ class Qontainernet(Containernet):
                          simple=False,
                          docker_bridge="quantum_bridge",
                          epr_frame_size=20,
+                         classical_buffer_size=100,
                          ):
         """
         Adds quantum link in the folloving way:
@@ -180,12 +181,22 @@ class Qontainernet(Containernet):
             ┌┴┐
         h1 -┘ └- h2
         """
-        q_link_dir = self.log_dir+"/bridge-"+str(self.quantum_bridge_counter)
+
+        br_type = ""
+        if not simple:
+            br_type = "qns"
+        else:
+            br_type = "c"
+
+        q_link_dir = self.log_dir+"/bridge"+str(br_type)+str(self.quantum_bridge_counter)
         abs_dir = str(str(pathlib.Path().absolute()) + q_link_dir.replace("./","/"))
+        print(q_link_dir)
+        print(abs_dir)
+
         os.mkdir(q_link_dir)
 
         bridge = self.addDockerHost(
-            "bridge"+str(self.quantum_bridge_counter),
+            "br"+str(br_type)+str(self.quantum_bridge_counter),
             dimage=f"{docker_bridge}:latest",
             ip=link_ip_address,
             docker_args={
@@ -248,7 +259,7 @@ class Qontainernet(Containernet):
         self._start(docker_bridge ,bridge , epr_frame_size=epr_frame_size, simple=simple)
         return bridge
 
-    def _start(self, docker_bridge, bridge, epr_frame_size=100, epr_buffer_size=1000, sleep_time=5, single_transmission_delay=1, simple=False):
+    def _start(self, docker_bridge, bridge, epr_frame_size=100, epr_buffer_size=1000, sleep_time=5, single_transmission_delay=1, simple=False, classical_buffer_size=100):
         """
         Initiate bridge.py and wait until it's up and running
         PRIVATE METHOD
@@ -258,7 +269,7 @@ class Qontainernet(Containernet):
         elif simple:
             bridge.cmd("tmux new-session -d -s bridge 'python simple_bridge.py' &")
         else:
-            bridge.cmd(f"tmux new-session -d -s bridge 'python bridge.py {epr_frame_size}' &")
+            bridge.cmd(f"tmux new-session -d -s bridge 'python bridge.py {epr_frame_size} {classical_buffer_size}' &")
 
         is_up = False
 
@@ -293,9 +304,12 @@ class Qontainernet(Containernet):
         dest_file = dest.split("/")[-1]
 
 
-        #print(f"cp {src} /logs/{dest_file}")
+        print(f"cp {src} /logs/{dest_file}")
+        bridge.cmd("ls /app")
         bridge.cmd(f"cp {src} /logs/{dest_file}")
-        q_link_file = self.log_dir+"/bridge-"+bridge.name.replace("bridge","") + "/" +dest_file
+        bridge.cmd("ls /logs")
+
+        q_link_file = self.log_dir+"/bridge"+"qns0"+"/" +dest_file
         q_link_file.replace("./","")
         dest_dirs = dest.split("/")[:-1]
 

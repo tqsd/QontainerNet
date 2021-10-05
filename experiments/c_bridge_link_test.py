@@ -22,8 +22,38 @@ from mininet.node import Controller
 from qontainernet import Qontainernet
 
 
+def deviations(array):
+    average = np.average(array)
+    negative = []
+    positive = []
+    for point in array:
+        if point >= average:
+            positive.append(point-average)
+            negative.append(0)
+        if point <= average:
+            negative.append(average-point)
+            positive.append(0)
+
+    p = 0
+    n = 0
+    for x in positive:
+        p = p + x**2
+    for x in negative:
+        n = n + x**2
+
+    try:
+        p = math.sqrt(p/len(positive))
+        n = math.sqrt(n/len(negative))
+    except:
+        print("Division by 0")
+
+    return p,n
+
+
 def test_topo(net,
               packet_generation_probability= 0.4,
+              period_length = 100,
+              generation_period_length = 50,
               epr_buffer_size = 0.1,
               epr_generation_rate=0.1,
               sleep_time = 10000000,
@@ -32,6 +62,7 @@ def test_topo(net,
               packet_size = 500,
               classical_buffer_size = 1,
               test_length=100,
+              traffic = "random"
               ):
     """Run test topology: double hop"""
     if packet_size < 42:
@@ -91,7 +122,7 @@ def test_topo(net,
     print(f"{x}mbit per epr frame")
     x = x * 10**6
     print(f"{x}bits per epr frame")
-    x = int(x)
+    x = int(x/8)
     print(f"{x}bytes per epr frame")
 
 
@@ -118,11 +149,14 @@ def test_topo(net,
                           c_buffer_size=ea_rate)
 
 
+    traffic_generation_command_random = f"python lt_traffic_generation.py 11.0.0.2 {packet_size} {packet_generation_probability} {int(ea_rate*1024*1024)}"
+    traffic_generation_command_periodic = f"python periodic_traffic_generation.py 11.0.0.2 {packet_size} {period_length} {generation_period_length} {int(ea_rate*1000*1000)}"
+    wrapper_command = None
+    if traffic == "random":
+        wrapper_command = f"tmux new-session -d -s traffic '{traffic_generation_command_random}' &"
+    else:
+        wrapper_command = f"tmux new-session -d -s traffic '{traffic_generation_command_periodic}' &"
 
-
-    traffic_generation_command = f"python lt_traffic_generation.py 11.0.0.2 {packet_size} {packet_generation_probability} {int(ea_rate*1000*1000)}"
-    wrapper_command = f"tmux new-session -d -s traffic '{traffic_generation_command}' &"
-    print(traffic_generation_command)
     h1.cmd(wrapper_command)
     info("*** Started traffic generation\n")
 
@@ -196,26 +230,38 @@ def test_topo(net,
         throughput = 1
 
     rejection_rate = 1-throughput
-    print(transmission_rates)
     average_transmission_rate = (out_count*packet_size*8/test_length)/10**6 # mbps
     average_active_transmission_rate = np.average([x for x in transmission_rates if x > ea_rate*0.1])
-    print(packet_generation_probability, throughput, rejection_rate,
-          average_transmission_rate, average_active_transmission_rate)
+    ur_err_pos, ur_err_neg = deviations([x for x in transmission_rates if x > ea_rate*0.1])
+    aar_dev = np.std([x for x in transmission_rates if x > ea_rate*0.1])
 
-    return (packet_generation_probability, throughput, rejection_rate,
-          average_transmission_rate, average_active_transmission_rate)
+    if traffic == "random":
+        print(packet_generation_probability, throughput, rejection_rate,
+            average_transmission_rate, average_active_transmission_rate, aar_dev, ur_err_pos, ur_err_neg)
+
+        return (packet_generation_probability, throughput, rejection_rate,
+        average_transmission_rate, average_active_transmission_rate, aar_dev, ur_err_pos, ur_err_neg)
+    else:
+        print(generation_period_length,period_length, throughput, rejection_rate,
+            average_transmission_rate, average_active_transmission_rate, aar_dev, ur_err_pos, ur_err_neg)
+
+        return (generation_period_length, period_length, throughput, rejection_rate,
+        average_transmission_rate, average_active_transmission_rate, aar_dev, ur_err_pos, ur_err_neg)
+
 
 def continued_simulation(
-                            epr_buffer_size = 0.2,
-                            epr_generation_rate=0.1,
-                            sleep_time = 10000000,
-                            ea_rate=0.2,
-                            nea_rate=0.1,
-                            packet_size = 900,
-                            classical_buffer_size = 1,
-                            test_length=20,
-                            rounds=None
-                         ):
+        epr_buffer_size = 0.2,
+        epr_generation_rate=0.1,
+        period_length = None,
+        sleep_time = 10000000,
+        ea_rate=0.2,
+        nea_rate=0.1,
+        packet_size = 900,
+        classical_buffer_size = 1,
+        test_length=20,
+        rounds=None,
+        traffic="random"
+        ):
 
     #Kill previous docker containers and setup
     containers = ["ch1","ch2","bridge0"]
@@ -225,8 +271,13 @@ def continued_simulation(
         except:
             pass
     simulated_probabilities = []
-    file_name = f"c_link_P={packet_size}_E={epr_buffer_size}_B={classical_buffer_size}_REA={ea_rate}_RNEA={nea_rate}_T={test_length}.csv"
-    path = "temp"
+    simulated_generation_periods = []
+    file_name = ""
+    path = "c_temp"
+    if traffic == "periodic":
+        file_name = f"c_{traffic}_link_NP={period_length}_P={packet_size}_E={epr_buffer_size}_B={classical_buffer_size}_REA={ea_rate}_RNEA={nea_rate}_T={test_length}.csv"
+    else:
+        file_name = f"c_{traffic}_link_P={packet_size}_E={epr_buffer_size}_B={classical_buffer_size}_REA={ea_rate}_RNEA={nea_rate}_T={test_length}.csv"
 
     print(os.getcwd())
     print(file_name)
@@ -254,30 +305,50 @@ def continued_simulation(
     i=1
     while True:
         probabilities = [x/(i*10) for x in range(0,i*10+1)]
+        print(probabilities)
+        generation_periods = [x for x in range(period_length+1)]
         with open(os.path.join(path,file_name), newline="") as csvfile:
             reader = csv.reader(csvfile, delimiter='|')
             for row in reader:
-                print(row)
-                simulated_probabilities.append(float(row[0]))
+                print(f"row- {row}")
+                if traffic=="random":
+                    simulated_probabilities.append(float(row[0]))
+                else:
+                    print("TEST")
+                    print(row)
+                    simulated_generation_periods.append(float(row[0]))
+        if traffic == "random":
+            probabilities.pop(0)
+            probabilities = list(filterfalse(set(simulated_probabilities).__contains__, probabilities))
+            print(probabilities)
+        else:
+            generation_periods.pop(0)
+            print(generation_periods)
+            generation_periods = list(filterfalse(set(simulated_generation_periods).__contains__, generation_periods))
+            print(f"GENERATION PERIODS ->{generation_periods}")
+            print(f"SIMULATED GEN -> {simulated_generation_periods}")
 
-        probabilities.pop(0)
-        probabilities = list(filterfalse(set(simulated_probabilities).__contains__, probabilities))
-        print(probabilities)
+        setups = []
+        if traffic=="random":
+            setups = probabilities
+        else:
+            setups = generation_periods
 
 
-        print(probabilities)
-        for p in probabilities:
+        print(setups)
+        for p in setups:
             net = Qontainernet(controller=Controller, link=TCLink)
             results = test_topo(net,
                                 packet_generation_probability= p,
+                                period_length=period_length,
+                                generation_period_length=p,
                                 epr_buffer_size = epr_buffer_size,
-                                epr_generation_rate = epr_generation_rate,
-                                sleep_time = sleep_time,
                                 ea_rate=ea_rate,
                                 nea_rate=nea_rate,
                                 packet_size = packet_size,
                                 classical_buffer_size = classical_buffer_size,
                                 test_length=test_length,
+                                traffic=traffic,
                                 )
             net.stop()
             print(f"Probability {p}")
@@ -295,30 +366,48 @@ def continued_simulation(
 
 
 
-
-
 if __name__ == "__main__":
     setLogLevel("info")
 
-    continued_simulation(   epr_buffer_size = 10,
-                            epr_generation_rate=0.2,
-                            sleep_time = 800000,#0.0000001*10**9,
-                            ea_rate=0.4,
-                            nea_rate=0.2,
-                            packet_size = 750,
-                            classical_buffer_size = 2,
-                            test_length=60,
-                            rounds = 2
-                         )
+    settings = [
+        {"e": 0.1,   "c":0.1},
+        {"e": 0.5,   "c":0.1},
+        {"e": 1,   "c":0.1},
+        {"e": 0.1,   "c":1},
+        {"e": 0.5,   "c":1},
+        {"e": 1,   "c":1},
+        {"e": 0.1,   "c":2},
+        {"e": 0.5,   "c":2},
+        {"e": 1,   "c":2},
+        {"e": 0.1,   "c":5},
+        {"e": 0.5,   "c":5},
+        {"e": 1,   "c":5},
+    ]
+    simulation_duration = 101
+    period_length = 10
+    for setting in settings:
+        print(setting)
 
-    continued_simulation(   epr_buffer_size = 10,
-                            epr_generation_rate=0.2,
-                            sleep_time = 800000,#0.0000001*10**9,
-                            ea_rate=0.4,
-                            nea_rate=0.2,
-                            packet_size = 750,
-                            classical_buffer_size = 1,
-                            test_length=60,
-                            rounds = 2
-                         )
+        continued_simulation(
+            epr_buffer_size =setting["e"],
+            period_length = period_length,
+            ea_rate=0.1,
+            nea_rate=0.05,
+            packet_size = 100,
+            classical_buffer_size = setting["c"],
+            test_length=simulation_duration,
+            rounds = 1,
+            traffic = "random"
+        )
 
+        continued_simulation(
+            epr_buffer_size =setting["e"],
+            period_length = period_length,
+            ea_rate=0.1,
+            nea_rate=0.05,
+            packet_size = 100,
+            classical_buffer_size = setting["c"],
+            test_length=simulation_duration,
+            rounds = 1,
+            traffic = "periodic"
+        )

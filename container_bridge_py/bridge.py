@@ -49,6 +49,10 @@ with open("/app/hosts.txt", "r") as host_file:
 epr_frame_size = 40
 if len(sys.argv) > 1:
     epr_frame_size = int(sys.argv[1])
+buffer_size = None
+if len(sys.argv) > 2:
+    buffer_size = int(sys.argv[2])
+
 quantum_protocol = Channel(hosts, epr_frame_size)
 
 def packet_diff(in_bits:list, out_bits:list):
@@ -83,6 +87,8 @@ def packet_processing(pkt):
     with open(LOGFILE, "a") as logfile:
         pkt.drop()
         start = time.time()
+        print(pkt.get_payload())
+        print(pkt.get_payload_len())
         packet = IP(pkt.get_payload())
         packet_bits = to_bit_array(packet)
 
@@ -90,13 +96,15 @@ def packet_processing(pkt):
         print(f"Packet received from {source_address}")
 
         raw_bytes_list = list(raw(packet))
-        if len(raw_bytes_list) == 24 and raw_bytes_list[-4] == 25:
+        print(raw_bytes_list)
+        if len(raw_bytes_list) == 52 and raw_bytes_list[-4] == 25:
             print("EPR SIGNAL RECEIVED")
             epr_packet_bits = quantum_protocol.transmit_packet('epr', source_address, "epr")
             return
 
-        new_packet_bits = quantum_protocol.transmit_packet(packet_bits, source_address, "normal")
 
+        new_packet_bits = quantum_protocol.transmit_packet(packet_bits, source_address, "normal")
+        print("SENDING ONWARDS")
         new_packet = IP(from_bit_array(new_packet_bits))
         send(new_packet)
         end = time.time()
@@ -115,7 +123,12 @@ except OSError:
 
 
 nfqueue = NetfilterQueue()
-nfqueue.bind(1, packet_processing)
+if buffer_size == None:
+    nfqueue.bind(1, packet_processing)
+else:
+    nfqueue.bind(1, packet_processing, buffer_size)
+
+
 print("Listening on a netfilter queue 1")
 #print("Started with entanglement generation")
 #t = DaemonThread(quantum_protocol.entanglement_generation)

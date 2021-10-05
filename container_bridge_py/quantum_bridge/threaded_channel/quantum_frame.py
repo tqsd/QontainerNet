@@ -112,7 +112,6 @@ class QuantumFrame:
                 self.host.send_qubit(destination.host_id, q, await_ack=self.await_ack,
                                             no_ack=True)
                 qbyte_ids.append(q.id)
-        print("DONE SENDING")
 
     def _send_data_frame_sc(self, data, destination):
         """

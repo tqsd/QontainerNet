@@ -109,7 +109,8 @@ class _Packet_logger:
                    epr_used, number_of_transmissions, transmission_type):
         print(f"Logging: {transmission_type}")
         transmission_time = end_time - start_time
-        transmission_time_no_measurement = transmission_time - measurement_time
+        print(type(transmission_time))
+        transmission_time_no_measurement = transmission_time
         #transmission_time = str(transmission_time.seconds) + '.' + str(transmission_time.microseconds/1000)
         start_time =  start_time - self.channel_start_time
         #start_time = str(start_time.seconds) + '.' + str(start_time.microseconds/1000)
@@ -133,8 +134,7 @@ class _Packet_logger:
 
         log_line = [sender, receiver, format(float(start_time.total_seconds()),".2f"),
                     format(float(end_time.total_seconds()),".2f"), format(float(transmission_time.total_seconds()),".2f")]
-        log_line.extend([format(float(measurement_time.total_seconds()), ".2f"),
-                         format(float(transmission_time_no_measurement.total_seconds()),".2f")])
+        log_line.extend(["0",format(float(transmission_time.total_seconds()),".2f")])
         log_line.extend([str(bit_len), format(bandwidth,".2f"),format(bandwidth_n_m,".2f")])
         log_line.extend([transmission_type, str(epr_used), str(number_of_transmissions)])
         log_line = [str(x) for x in log_line]
